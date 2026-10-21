@@ -1,0 +1,12 @@
+<ui:FluentWindow x:Class="QuickStartLauncher.Views.DesignPreviewWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml" Title="QuickStart · Design preview (Debug)" Width="760" Height="580" ExtendsContentIntoTitleBar="True" WindowCornerPreference="Round">
+ <Grid Background="{DynamicResource Bg.Tint}"><StackPanel Margin="28"><TextBlock Text="Glass / Control gallery" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,24"/>
+  <Border Style="{StaticResource GlassCard}"><StackPanel><TextBlock Text="Typography &amp; surfaces" FontSize="20"/><TextBlock Text="Nội dung phụ · Segoe UI Variable · 12px" Style="{StaticResource Muted}" Margin="0,8"/>
+   <WrapPanel><Button Content="Glass button"/><Button Content="Primary action" Style="{StaticResource PrimaryButton}"/><Button Content="Disabled" IsEnabled="False"/></WrapPanel>
+   <TextBox Text="Đường dẫn và nội dung tiếng Việt" AutomationProperties.Name="Text input demo"/>
+   <ComboBox SelectedIndex="0"><ComboBoxItem Content="Profile cá nhân"/><ComboBoxItem Content="Profile công việc"/></ComboBox>
+   <WrapPanel><CheckBox Content="Bật" IsChecked="True"/><CheckBox Content="Tắt" Margin="24,6"/></WrapPanel>
+   <WrapPanel><TextBlock Text="✓ Thành công" Foreground="{DynamicResource State.Success}" Margin="0,8,24,8"/><TextBlock Text="✕ Có lỗi" Foreground="{DynamicResource State.Error}" Margin="0,8,24,8"/><TextBlock Text="⚠ Cảnh báo" Foreground="{DynamicResource State.Warning}" Margin="0,8"/></WrapPanel>
+  </StackPanel></Border>
+  <TextBlock Text="Tab để kiểm tra focus · đóng cửa sổ bằng Alt+F4" Style="{StaticResource Muted}" Margin="0,16"/>
+ </StackPanel></Grid>
+</ui:FluentWindow>

@@ -1,270 +1,61 @@
-# Quick Start Launcher — SPEC (v2)
+# QuickStartLauncher v3 — specification
 
-> App Windows siêu gọn: bấm **Begin** để khởi chạy tuần tự danh sách hành động (mở app / mở website / chạy lệnh / chờ), xong là **thoát**. Có **Config** để tạo/sửa danh sách. Không chạy nền.
+## Kiến trúc
 
----
+.NET 8, Windows 10 build 19041+, WPF-UI FluentWindow. CommunityToolkit.Mvvm, POCO model độc lập UI, DI trong App, Serilog file log 14 ngày.
 
-## 0) Hướng dẫn cho MCP Kilo (Scaffold & Deliverables)
+- Config: camelCase JSON, enum string, migrate v2, validate, backup, atomic save.
+- Apps: IShellItem2/AppsFolder trên STA; dedupe, lọc rác, sort vi-VN; icon IShellItemImageFactory được Freeze, giải phóng COM/HBITMAP, cache RAM/PNG.
+- Search: tiếng Việt, alias/acronym, Damerau-Levenshtein; debounce 120 ms.
+- Browsers: Chrome/Edge/Brave/Cốc Cốc/Opera/Firefox, App Paths registry; Chromium Local State với FileShare.ReadWrite; Firefox profiles.ini.
+- Launch: snapshot queue, tuần tự, cancel, progress, bốn loại action; Process.Start trên STA nền.
+- Startup: HKCU Run và StartupApproved, self-heal đường dẫn khi mở app/lưu.
+- Theme: Acrylic/Mica + DWM corner/dark mode; light/dark/system, fallback khi tắt transparency/RDP/Windows cũ.
+- Views: Launcher, Config (Actions/Settings/editor drawer), picker ảo hóa, toast, gallery Debug.
+- ViewModels: observable wrappers, profile CRUD/import/export, action reorder/undo, autosave 500 ms.
 
-- **Stack**: .NET 8 (C#) + **WPF** + MVVM tối giản.
-- **Project name**: `QuickStartLauncher` (Exe).
-- **Output**: 1 file exe + thư mục `config/`, `logs/` bên cạnh (dev build); option MSIX sau.
-- **Packages** (không bắt buộc nhưng gợi ý):
-  - Logging: `Serilog`, `Serilog.Sinks.File`.
-  - JSON: `System.Text.Json` (built‑in). Không cần Newtonsoft nếu không cần.
-- **Deliverables**:
-  1. Source code build được `Debug/Release`.
-  2. `README.md` (cách build/chạy).
-  3. `spec.md` (file này).
-  4. `QuickStartLauncher.exe` (Release) + sample `config.json`.
+## Schema
 
----
+Xem config.json ở root cho mẫu hợp lệ.
 
-## 1) Mục tiêu & Phạm vi
+AppConfig: version=3, settings, activeProfileId, profiles.
+Profile: GUID id, name, icon, actions.
+LaunchAction chung: kind, GUID id, name, enabled=true, skipOnAutostart=false, delayAfterMs=0.
+- app: target {aumid?, path?}, arguments, workingDir?, runAsAdmin, browser? {urls[], newWindow, profileDir?}.
+- website: url, browserId=default, newWindow.
+- command: command, shell=cmd|powershell|pwsh, workingDir?, hidden=true, runAsAdmin.
+- delay: ms=0..60000.
 
-- Popup nhỏ có **Begin** và **⚙ Config**.
-- Action hỗ trợ: `app`, `website`, `command`, `delay`.
-- **Tìm ứng dụng theo tên** (fuzzy) từ Start Menu + Registry. **Fallback**: duyệt `.exe`.
-- **Nhận diện trình duyệt** → hiện **Default URL** khi action là app-browse.
-- **Profiles** nhiều cấu hình (Default bắt buộc).
-- Cấu hình lưu **JSON**; log nhẹ ra file.
-- Hoàn tất queue → **thoát app**.
+Settings: theme=system|light|dark; startup {mode=off|runProfiles|showLauncher, profileIds[], delaySeconds=0..120, countdownSeconds=0..15}; closeWhenDone=true, closeDelayMs=1200, keepOpenOnError=true.
 
-**Ngoài phạm vi v1**: auto‑run at startup, auto‑update, UWP AppUserModelID, sync cloud.
+Discriminator duy nhất kind. Rename giữ ID; import/duplicate profile tạo ID mới cho profile/action.
 
----
+## Migration / persistence
 
-## 2) UI/UX
+Config chưa có version: map $type app/command/website/delay sang v3, shell 0/1 thành cmd/powershell, giữ URL/profile/newWindow. Loại không nhận diện làm migration thất bại để không bỏ dữ liệu. Startup mặc định off.
 
-### 2.1 Popup chính
+Backup trước replace; nếu backup v2 đã tồn tại nhưng khác nội dung, tạo thêm bản timestamp. Sau render, khớp exe path với AppsFolder để enrich AUMID. File hỏng được giữ và khóa ghi, import v3 hợp lệ khôi phục.
 
-- Kích thước \~320–360px rộng; AlwaysOnTop; có thể kéo.
-- Thành phần: Nút **Begin** (primary), icon **⚙** (góc phải trên), thanh trạng thái nhỏ.
-- Hành vi: nhấn **Begin** → chạy queue theo **active profile** → hiển thị tiến trình + đếm lỗi → **thoát** sau khi xong.
+Save snapshot JSON trước await, dùng semaphore, WriteThrough + Flush(true), File.Replace (Move khi lần đầu). Lỗi lưu được hiện ra UI.
 
-### 2.2 Màn hình Config
+## Thực thi
 
-- Sections: `Actions` | `Profiles` | `Search Index`.
-- **Actions**:
-  - Danh sách có **drag‑and‑drop reorder**, Duplicate, Delete.
-  - `Add Action` → chọn loại: `App` / `Website` / `Command` / `Delay`.
-  - `Test Selected` để chạy thử **1 action** đang chọn.
-- **Profiles**: CRUD profile, set **Active**.
-- **Search Index**: hiện `items`, `last updated`; nút **Rebuild Index** (progress modal).
-- Keyboard: `Enter` (Begin), `Esc` (Close), `Ctrl+S` (Save trong Config).
+Pending → Running → Done/Failed/Skipped. Lỗi không dừng queue. Disabled/skipOnAutostart theo ngữ cảnh. Delay có countdown, delayAfter sau action; cancel không đóng ứng dụng đã mở.
 
----
+App ưu tiên exe tồn tại, resolve path từ AUMID khi thiếu. Store dùng IApplicationActivationManager. Win32/PWA chỉ có AUMID dùng Explorer shell:AppsFolder; có tham số không truyền được thì báo lỗi. UAC 1223 là Skipped.
 
-## 3) Action Types & Fields
+URL chỉ http/https/file và quote theo Windows. Chromium dùng profile-directory/new-window; Firefox -P/new-window/new-tab. Website default dùng shell URL handler, newWindow do browser mặc định quyết định.
 
-### 3.1 `app`
+Cmd /d /c. PowerShell/pwsh dùng EncodedCommand UTF-16LE giữ nháy/nhiều dòng. Fire-and-forget. Hidden: UseShellExecute=false/CreateNoWindow. Admin: UseShellExecute=true, không ẩn.
 
-- Chọn ứng dụng bằng **Search fuzzy** (ưu tiên Start Menu) hoặc **Browse .exe**.
-- Trường:
-  - `name` (string, hiển thị)
-  - `path` (string, bắt buộc nếu chọn thủ công)
-  - `arguments` (string, optional)
-  - `runAsAdmin` (bool)
-  - `isBrowser` (bool, auto‑detect)
-  - `url` (string, optional – hiện nếu `isBrowser`)
-  - `newWindow` (bool, optional – cho browser)
+## Startup / vòng đời
 
-### 3.2 `website`
+Run value QuickStartLauncher = quoted exe + --autostart. Off xóa value; chế độ khác cập nhật path. StartupApproved byte 3/7 hiện cảnh báo.
 
-- Trường: `url` (string, bắt buộc), `browser` (`default|chrome|msedge|firefox|brave|opera`), `newWindow` (bool optional).
+Autostart: delay không cửa sổ → launcher hoặc toast countdown → profileIds theo thứ tự. Mở Launcher từ toast giữ trạng thái để thử lại. Xong đóng sau closeDelayMs; lỗi + keepOpenOnError thì giữ.
 
-### 3.3 `command`
+Global mutex + named event, instance thứ hai activate. --profile nhận tên/GUID chạy ngay; --config mở cấu hình; --design chỉ Debug.
 
-- Trường: `command` (string), `workingDir` (string optional), `runAsAdmin` (bool optional).
+## Validation
 
-### 3.4 `delay`
-
-- Trường: `ms` (int ≥ 0).
-
-**JSON mẫu**
-
-```json
-{
-  "activeProfile": "Default",
-  "profiles": [
-    {
-      "name": "Default",
-      "actions": [
-        { "type": "app", "name": "Notepad++", "path": "C:\Program Files\Notepad++\notepad++.exe" },
-        { "type": "app", "name": "Chrome", "path": "C:\Program Files\Google\Chrome\Application\chrome.exe", "isBrowser": true, "url": "https://facebook.com", "newWindow": true },
-        { "type": "delay", "ms": 1500 },
-        { "type": "command", "command": "cmd /c start ms-settings:windowsupdate" },
-        { "type": "website", "url": "https://portal.company", "browser": "edge" }
-      ]
-    }
-  ]
-}
-```
-
----
-
-## 4) Tìm ứng dụng như Windows Search
-
-### 4.1 Nguồn index
-
-1.  **Start Menu (.lnk)**
-    - All users: `C:\ProgramData\Microsoft\Windows\Start Menu\Programs`
-    - User: `%AppData%\Microsoft\Windows\Start Menu\Programs`
-    - Resolve `.lnk` → target `.exe`, tên hiển thị, icon.
-2.  **Registry Uninstall** (DisplayName)
-    - `HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall`
-    - `HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall`
-    - `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall`
-3.  **Program Files scan** (tùy chọn) — chỉ các thư mục whitelist thông dụng.
-
-### 4.2 Fuzzy match & ưu tiên
-
-- Normalize: lowercase, bỏ dấu, bỏ từ rác (`setup`, `updater`, `helper`).
-- Alias: tên shortcut, file exe, `ProductName`, `DisplayName`.
-- Scoring: `exact > startswith > substring > fuzzy(Levenshtein/token)`.
-- Ưu tiên kết quả từ **Start Menu**.
-
-### 4.3 Cache & Rebuild
-
-- Lưu `%LocalAppData%\QuickStart\appIndex.json`.
-- Build lần đầu khi mở Config; có **Rebuild Index**.
-
----
-
-## 5) Nhận diện trình duyệt & mở URL
-
-- **Whitelist exe**: `chrome.exe`, `msedge.exe`, `firefox.exe`, `brave.exe`, `opera.exe`, `iexplore.exe`.
-- Double‑check metadata `ProductName`/`CompanyName`.
-- Khi `isBrowser==true`: hiển thị field **Default URL** + `newWindow`.
-
-**Lệnh mở URL tham khảo**
-
-- Chrome: `chrome.exe --new-window "{url}"` (hoặc `--new-tab`)
-- Edge: `msedge.exe --new-window "{url}"`
-- Firefox: `firefox.exe -new-window "{url}"`
-- Brave: `brave.exe --new-window "{url}"`
-- Opera: `opera.exe --new-window "{url}"`
-- **Default browser**: `UseShellExecute=true` với `{url}`.
-
----
-
-## 6) Thực thi (Begin)
-
-- Chạy **tuần tự** qua danh sách action.
-- `app`: nếu browser + có `url` → chèn args theo bảng trên; hỗ trợ `arguments`, `runAsAdmin` (`Verb=runas`).
-- `website`: `default` → shell execute; chỉ định browser → gọi exe tương ứng + args.
-- `command`: gọi trực tiếp hoặc qua `cmd /c`; tôn trọng `workingDir`.
-- `delay`: `Task.Delay(ms)`.
-- Không đặt timeout kill process (fire‑and‑forget). Xong hàng đợi → **thoát app**.
-
----
-
-## 7) Logging & Lỗi
-
-- File log: `%LocalAppData%\QuickStart\logs\yyyy-MM-dd.log`.
-- Mức `INFO` (start/stop), `ERROR` (chi tiết action lỗi + stacktrace).
-- UI hiển thị tổng số action và số lỗi. Không chặn queue khi lỗi.
-
----
-
-## 8) Lưu trữ & Cấu trúc thư mục
-
-- Thư mục: `%LocalAppData%\QuickStart\config` (JSON), `%LocalAppData%\QuickStart\logs` (log), `%LocalAppData%\QuickStart\appIndex.json` (cache).
-- Output build gợi ý:
-
-```
-/QuickStartLauncher
-  /config
-  /logs
-  QuickStartLauncher.exe
-```
-
----
-
-## 9) Kiến trúc code (MVVM gọn)
-
-- `Views/` (Popup, ConfigWindow)
-- `ViewModels/` (MainVM, ConfigVM, ActionsVM, ProfilesVM)
-- `Models/` (Action models, Profile)
-- `Services/`
-  - `IActionExecutor` (App/Website/Command/Delay)
-  - `IAppIndexService` (scan + fuzzy search)
-  - `IConfigService` (load/save JSON)
-  - `ILogService` (wrap Serilog)
-- `Core/` (Utils: Normalize, Fuzzy, FileOps)
-
----
-
-## 10) Acceptance Criteria (Test)
-
-- **Search fuzzy**: gõ `chrmoe` → trả `Google Chrome` trong top 3.
-- **Browse fallback**: chọn `.exe` bất kỳ → tạo action hợp lệ.
-- **Browser detect**: chọn `chrome.exe` → hiện `Default URL`; chạy mở đúng URL.
-- **Website default**: mở bằng browser mặc định của Windows.
-- **Command**: `cmd /c echo hello` chạy không treo UI.
-- **Delay**: 1500ms tạo trễ \~1.5s giữa 2 action.
-- **Order**: thực thi đúng thứ tự; lỗi 1 action không dừng queue.
-- **Exit**: hoàn tất queue → process thoát trong ≤2s.
-- **Log**: tạo file theo ngày; có entry ERROR khi lỗi.
-
----
-
-## 11) Hiệu năng & Ổn định
-
-- Build index lần đầu ≤ 3s với \~200 shortcut.
-- Tìm kiếm trả kết quả ≤ 100ms sau khi dừng gõ (debounce 150ms).
-- Begin chạy async, UI không “đơ”.
-
----
-
-## 12) Bảo mật & Quyền
-
-- `runAsAdmin` chỉ khi user bật; để Windows UAC xử lý.
-- Không lưu secrets; không chỉnh registry hệ thống.
-
----
-
-## 13) Đóng gói & Phát hành
-
-- Icon `.ico` 256px.
-- Tên exe: `QuickStartLauncher.exe`.
-- (Tùy chọn) profile portable: nếu không có quyền ghi `%LocalAppData%`, lưu cạnh exe.
-- (Tùy chọn) MSIX + App Installer (để sau v1).
-
----
-
-## 14) Hướng mở rộng
-
-- UWP/Store Apps (`shell:AppsFolder` + AppUserModelID).
-- **Parallel groups** (nhóm action chạy song song).
-- Export/Import profile.
-- Global Hotkey để chạy nhanh profile.
-- Auto‑run at startup; Auto‑update.
-
----
-
-## Phụ lục — Wireframe ASCII
-
-```
-+----------------------------------+
-| Quick Start Launcher        [⚙]  |
-|----------------------------------|
-|                                  |
-|             Begin                |
-|                                  |
-|  Status: Ready                   |
-+----------------------------------+
-
-[Config]
-+---------------------------------------------------+
-| Profile: [Default  v]        [Save] [Cancel]      |
-|---------------------------------------------------|
-| Actions                                           |
-| 1) App   | Chrome (isBrowser, url=https://...)    |
-| 2) Delay | 1500 ms                                |
-| 3) App   | Notepad++                              |
-|  [Add Action v]  [Test Selected]                  |
-|---------------------------------------------------|
-| Search Index:  items=231  last=2025-08-11         |
-| [Rebuild Index]                                   |
-+---------------------------------------------------+
+Tests/ là WPF test executable: fixture migration, fake process/UAC, registry test riêng, AppsFolder thật, VM và render UI. scripts/Verify-Release.ps1 test exe portable. VERIFICATION.md ghi kết quả và giới hạn thực tế.

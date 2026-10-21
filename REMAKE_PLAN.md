@@ -449,50 +449,50 @@ Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct);   // 
 ## 7. Lộ trình triển khai (checklist)
 
 ### Phase 0 — Chuẩn bị
-- [ ] `git init`, thêm `.gitignore` (bin/obj/.vs), commit bản v2 nguyên trạng (`chore: snapshot v2 before remake`).
-- [ ] Tạo nhánh `remake-v3`.
-- [ ] Backup thủ công `%LocalAppData%\QuickStart\config\config.json`.
+- [x] `git init`, thêm `.gitignore` (bin/obj/.vs), commit bản v2 nguyên trạng (`chore: snapshot v2 before remake`).
+- [x] Tạo nhánh `remake-v3`.
+- [x] Backup thủ công `%LocalAppData%\QuickStart\config\config.json`.
 
 ### Phase 1 — Nền móng
-- [ ] Xóa code v2 (Views, ViewModels, Models, Services, Core); giữ `Assets/`.
-- [ ] Cập nhật `csproj` + packages (§2), `NativeMethods.txt`.
-- [ ] `App.xaml.cs`: DI container, Serilog, single-instance, parse CLI args, global exception handler.
-- [ ] Models v3 + JSON options (§4).
-- [ ] `ConfigService` (load/save atomic) + `ConfigMigrator` + unit test với config thật.
+- [x] Xóa code v2 (Views, ViewModels, Models, Services, Core); giữ `Assets/`.
+- [x] Cập nhật `csproj` + packages (§2), `NativeMethods.txt`.
+- [x] `App.xaml.cs`: DI container, Serilog, single-instance, parse CLI args, global exception handler.
+- [x] Models v3 + JSON options (§4).
+- [x] `ConfigService` (load/save atomic) + `ConfigMigrator` + unit test với config thật.
 - **Done khi**: app chạy lên cửa sổ trống, migrate config cũ ra đúng JSON v3.
 
 ### Phase 2 — Services lõi
-- [ ] `ShellAppsFolderProvider` + `IconCache` (§5.1).
-- [ ] `TextNormalizer` + `FuzzySearch` + unit test acceptance (§5.2).
-- [ ] `BrowserCatalog` + `BrowserProfileReader` + default browser (§5.3).
-- [ ] `LaunchService` với 4 handler + AUMID activation (§5.4).
-- [ ] `StartupService` (§5.5).
+- [x] `ShellAppsFolderProvider` + `IconCache` (§5.1).
+- [x] `TextNormalizer` + `FuzzySearch` + unit test acceptance (§5.2).
+- [x] `BrowserCatalog` + `BrowserProfileReader` + default browser (§5.3).
+- [x] `LaunchService` với 4 handler + AUMID activation (§5.4).
+- [x] `StartupService` (§5.5).
 - **Done khi**: console/test harness liệt kê được app + icon, chạy được 4 action của config thật.
 
 ### Phase 3 — Design system
-- [ ] `Glass.Colors.xaml` (light/dark), `Glass.Controls.xaml`, animations (§6.1).
-- [ ] Backdrop + fallback Win10/transparency off (§6.2).
-- [ ] Trang demo nội bộ (debug only) hiển thị mọi control để soát style.
+- [x] `Glass.Colors.xaml` (light/dark), `Glass.Controls.xaml`, animations (§6.1).
+- [x] Backdrop + fallback Win10/transparency off (§6.2).
+- [x] Trang demo nội bộ (debug only) hiển thị mọi control để soát style.
 
 ### Phase 4 — Launcher + Autostart toast
-- [ ] `LauncherWindow` + `LauncherViewModel` (§6.3), progress realtime, cancel, retry lỗi.
-- [ ] `AutostartToast` + flow `--autostart` (§5.5).
-- [ ] `--profile` CLI.
+- [x] `LauncherWindow` + `LauncherViewModel` (§6.3), progress realtime, cancel, retry lỗi.
+- [x] `AutostartToast` + flow `--autostart` (§5.5).
+- [x] `--profile` CLI.
 
 ### Phase 5 — Config + Picker + Settings
-- [ ] `ConfigWindow` shell + sidebar profile (CRUD, duplicate, import/export).
-- [ ] Action list: drag reorder, toggle, menu ⋯, multi-select, undo xóa.
-- [ ] Editors 4 loại + Chạy thử.
-- [ ] `AppPickerDialog` (§6.5).
-- [ ] `SettingsPage` (§6.6) nối với `StartupService`.
-- [ ] Auto-save debounce.
+- [x] `ConfigWindow` shell + sidebar profile (CRUD, duplicate, import/export).
+- [x] Action list: drag reorder, toggle, menu ⋯, multi-select, undo xóa.
+- [x] Editors 4 loại + Chạy thử.
+- [x] `AppPickerDialog` (§6.5).
+- [x] `SettingsPage` (§6.6) nối với `StartupService`.
+- [x] Auto-save debounce.
 
 ### Phase 6 — Hoàn thiện & phát hành
-- [ ] Rà accessibility: tab order, `AutomationProperties.Name`, contrast text trên glass ≥ 4.5:1.
-- [ ] Hiệu năng: đo thời gian mở Launcher (mục tiêu < 400ms cold start với ReadyToRun), picker, enumerate.
-- [ ] `dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true`.
-- [ ] Cập nhật `README.md`, viết `spec.md` v3 (thay spec v2), xóa `config.json` mẫu cũ → mẫu v3.
-- [ ] Chạy toàn bộ test acceptance §8 trên máy thật, khởi động lại Windows để test autostart.
+- [x] Rà accessibility: tab order, `AutomationProperties.Name`, contrast text trên glass ≥ 4.5:1.
+- [x] Hiệu năng: đo thời gian mở Launcher (mục tiêu < 400ms cold start với ReadyToRun), picker, enumerate.
+- [x] `dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true -p:PublishReadyToRun=true`.
+- [x] Cập nhật `README.md`, viết `spec.md` v3 (thay spec v2), xóa `config.json` mẫu cũ → mẫu v3.
+- [ ] Chạy toàn bộ test acceptance §8 trên máy thật, khởi động lại Windows để test autostart. **Còn kiểm chứng vật lý; xem VERIFICATION.md.**
 
 ---
 
@@ -500,10 +500,10 @@ Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct);   // 
 
 **Chọn app**
 - [ ] Picker liệt kê đủ app như Start Menu, gồm app Store (Teams mới, Calculator, Outlook mới nếu có) kèm icon đúng.
-- [ ] Gõ `chrmoe` → Google Chrome trong top 3; `outlok` → Outlook; `zalo` → Zalo; tìm có/không dấu đều ra.
-- [ ] Chọn 3 app cùng lúc → thêm 3 action đúng thứ tự chọn.
+- [x] Gõ `chrmoe` → Google Chrome trong top 3; `outlok` → Outlook; `zalo` → Zalo; tìm có/không dấu đều ra.
+- [x] Chọn 3 app cùng lúc → thêm 3 action đúng thứ tự chọn.
 - [ ] Browse `.exe` bất kỳ → action hợp lệ, có icon.
-- [ ] Mở picker lần 2 ≤ 200ms (có cache).
+- [x] Mở picker lần 2 ≤ 200ms (có cache).
 
 **Trình duyệt**
 - [ ] Chọn Chrome/Edge/Cốc Cốc → editor hiện section Trình duyệt, dropdown profile hiển thị tên thật.
@@ -511,11 +511,11 @@ Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct);   // 
 - [ ] Website action `default` → mở bằng trình duyệt mặc định Windows.
 
 **Thực thi**
-- [ ] Đúng thứ tự; `delayAfterMs`/Delay chờ đúng (±150ms).
-- [ ] 1 action lỗi (path sai) → đánh ✕, các action sau vẫn chạy, log ERROR.
+- [x] Đúng thứ tự; `delayAfterMs`/Delay chờ đúng (±150ms).
+- [x] 1 action lỗi (path sai) → đánh ✕, các action sau vẫn chạy, log ERROR.
 - [ ] UAC bấm No → `Skipped`, không crash.
-- [ ] Action `enabled=false` không chạy.
-- [ ] Xong 0 lỗi → process thoát ≤ 2s.
+- [x] Action `enabled=false` không chạy.
+- [x] Xong 0 lỗi → process thoát ≤ 2s.
 - [ ] Command `start msteams:` mở Teams, không hiện cửa sổ cmd khi `hidden`.
 
 **Khởi động cùng Windows**
@@ -527,8 +527,8 @@ Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct);   // 
 
 **Profiles & config**
 - [ ] Tạo/đổi tên/nhân bản/xóa profile; không xóa được profile cuối.
-- [ ] Đổi tên profile không làm mất lựa chọn trong startup.
-- [ ] Config v2 thật migrate đủ 4 action, có file `.v2.bak.json`.
+- [x] Đổi tên profile không làm mất lựa chọn trong startup.
+- [x] Config v2 thật migrate đủ 4 action, có file `.v2.bak.json`.
 - [ ] Export → Import profile trên máy khác (path không tồn tại → action hiện cảnh báo "Không tìm thấy ứng dụng", không crash).
 - [ ] Tắt máy đột ngột khi đang lưu không làm hỏng config (atomic write).
 
@@ -562,3 +562,12 @@ Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct);   // 
 - Chờ app "sẵn sàng" (phát hiện cửa sổ chính) trước khi chạy action tiếp.
 - Profile theo lịch (ngày làm việc vs cuối tuần) / theo mạng Wi-Fi.
 - Auto-update, MSIX.
+
+
+## 11. Kết quả triển khai — 21/10/2026
+
+Mã v3 đã triển khai, Debug build sạch, 73/73 harness checks, 6/6 Release smoke checks. Bản chạy: artifacts/release/QuickStartLauncher.exe.
+
+Báo cáo và giới hạn: **VERIFICATION.md**. Cold start thực đo 1247 ms, **chưa đạt** mục tiêu 400 ms. Không đánh dấu hoàn tất kiểm tra reboot/UAC thật/Win10/desktop input khi chưa có bằng chứng. Checkbox nghiệm thu chưa đánh dấu không đồng nghĩa chưa có code; một số cần xác nhận bằng thao tác vật lý.
+
+Snapshot v2: c9aba78. Branch: remake-v3. Config thật đã migrate đủ bốn mục và có backup.

@@ -1,0 +1,47 @@
+<UserControl x:Class="QuickStartLauncher.Views.Pages.ActionsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:QuickStartLauncher.Views.Controls" xmlns:dd="urn:gong-wpf-dragdrop" xmlns:editors="clr-namespace:QuickStartLauncher.Views.Editors" SizeChanged="OnSizeChanged">
+ <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition x:Name="EditorColumn" Width="330"/></Grid.ColumnDefinitions>
+  <Grid Margin="0,0,12,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <DockPanel Margin="0,0,0,12"><Button DockPanel.Dock="Right" Content="▶ Chạy / Hủy" Command="{Binding TestProfileCommand}"/><TextBlock Text="{Binding SelectedProfile.Label}" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center"/></DockPanel>
+   <Border Grid.Row="1" Style="{StaticResource GlassCard}" Padding="8">
+    <ListBox x:Name="ActionList" ItemsSource="{Binding SelectedProfile.Actions}" SelectedItem="{Binding SelectedAction}" SelectionMode="Extended" SelectionChanged="ActionSelectionChanged" PreviewKeyDown="ListKeyDown" dd:DragDrop.IsDragSource="True" dd:DragDrop.IsDropTarget="True" dd:DragDrop.UseDefaultDragAdorner="True" AutomationProperties.Name="Tác vụ trong profile">
+     <ListBox.ItemTemplate><DataTemplate>
+      <Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition Width="34"/><ColumnDefinition/><ColumnDefinition Width="25"/><ColumnDefinition Width="30"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+       <TextBlock Text="⠿" VerticalAlignment="Center" Foreground="{DynamicResource Text.Secondary}" ToolTip="Kéo để sắp xếp; dùng nút ↑ ↓ bằng bàn phím"/>
+       <Grid Grid.Column="1"><TextBlock Text="{Binding FallbackIcon}" Visibility="{Binding HasIcon, Converter={StaticResource BoolVisibility}, ConverterParameter=Invert}" FontSize="23" VerticalAlignment="Center"/><Image Source="{Binding Icon}" Width="28" Height="28"/></Grid>
+       <StackPanel Grid.Column="2" Margin="8,0"><TextBlock Text="{Binding Name}" ToolTip="{Binding ValidationMessage}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/><TextBlock Text="{Binding Description}" Style="{StaticResource Muted}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/></StackPanel>
+       <local:ActionStatus Grid.Column="3" VerticalAlignment="Center"/>
+       <CheckBox Grid.Column="4" IsChecked="{Binding Enabled}" AutomationProperties.Name="Bật tác vụ"/><Button Grid.Column="5" Content="⋯" Padding="2" MinHeight="26" Margin="0" Click="ActionMenuClick" AutomationProperties.Name="Menu tác vụ"/>
+      </Grid>
+     </DataTemplate></ListBox.ItemTemplate>
+    </ListBox>
+   </Border>
+   <StackPanel Grid.Row="2" Margin="0,12,0,0">
+    <WrapPanel><Button Content="＋ Ứng dụng" Command="{Binding AddAppsCommand}"/><Button Content="＋ Website" Command="{Binding AddWebsiteCommand}"/><Button Content="＋ Lệnh" Command="{Binding AddCommandCommand}"/><Button Content="＋ Chờ" Command="{Binding AddDelayCommand}"/></WrapPanel>
+    <WrapPanel><Button Content="↑" Command="{Binding MoveUpCommand}" AutomationProperties.Name="Đưa tác vụ lên"/><Button Content="↓" Command="{Binding MoveDownCommand}" AutomationProperties.Name="Đưa tác vụ xuống"/><Button Content="Nhân bản" Command="{Binding DuplicateActionCommand}"/><Button Content="Xóa" Click="DeleteClick"/><Button Content="Hoàn tác" Command="{Binding UndoCommand}"/></WrapPanel>
+   </StackPanel>
+  </Grid>
+  <Border x:Name="EditorPanel" Grid.Column="1" Style="{StaticResource GlassCard}" Padding="16" Panel.ZIndex="2">
+   <DockPanel>
+    <Button x:Name="CloseDrawer" Content="Đóng chỉnh sửa →" DockPanel.Dock="Top" Click="CloseDrawerClick" Visibility="Collapsed"/>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+     <StackPanel>
+      <TextBlock Text="CHỈNH SỬA" Style="{StaticResource Muted}" Margin="0,0,0,12"/>
+      <StackPanel DataContext="{Binding SelectedAction}">
+       <TextBlock Text="{Binding KindLabel}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
+       <TextBlock Text="Tên hiển thị" Margin="0,12,0,0"/><TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tên tác vụ"/>
+       <editors:AppActionEditor Visibility="{Binding IsApp, Converter={StaticResource BoolVisibility}}"/>
+       <editors:WebsiteActionEditor Visibility="{Binding IsWebsite, Converter={StaticResource BoolVisibility}}"/>
+       <editors:CommandActionEditor Visibility="{Binding IsCommand, Converter={StaticResource BoolVisibility}}"/>
+       <editors:DelayActionEditor Visibility="{Binding IsDelay, Converter={StaticResource BoolVisibility}}"/>
+       <TextBlock Text="{Binding ValidationMessage}" Foreground="{DynamicResource State.Warning}" Margin="0,8"/>
+       <CheckBox Content="Bỏ qua khi tự khởi động" IsChecked="{Binding SkipOnAutostart}"/>
+       <TextBlock Text="Chờ sau tác vụ (ms)" Style="{StaticResource Muted}"/>
+       <TextBox Text="{Binding DelayAfterMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Chờ sau tác vụ mili giây"/>
+      </StackPanel>
+      <Button Content="▶ Chạy thử / Hủy" Command="{Binding TestActionCommand}" Style="{StaticResource PrimaryButton}"/>
+     </StackPanel>
+    </ScrollViewer>
+   </DockPanel>
+  </Border>
+ </Grid>
+</UserControl>

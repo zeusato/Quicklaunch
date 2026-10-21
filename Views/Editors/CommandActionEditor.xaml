@@ -1,0 +1,9 @@
+<UserControl x:Class="QuickStartLauncher.Views.Editors.CommandActionEditor" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <StackPanel><TextBlock Text="Shell"/><ComboBox ItemsSource="{Binding Shells}" SelectedItem="{Binding Shell}" AutomationProperties.Name="Shell thực thi"/>
+ <TextBlock Text="Lệnh"/><TextBox Text="{Binding Command, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="100" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Nội dung lệnh"/>
+ <TextBlock Text="Thư mục làm việc"/><TextBox Text="{Binding WorkingDir, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Thư mục làm việc lệnh"/>
+ <Button Content="Chọn thư mục…" Click="BrowseFolder"/>
+ <CheckBox Content="Ẩn cửa sổ" IsChecked="{Binding Hidden}"/><CheckBox Content="Chạy với quyền quản trị" IsChecked="{Binding RunAsAdmin}"/>
+ <TextBlock Text="Chạy quản trị sẽ hiện UAC; tùy chọn ẩn cửa sổ không áp dụng." Style="{StaticResource Muted}" Visibility="{Binding RunAsAdmin, Converter={StaticResource BoolVisibility}}"/>
+ </StackPanel>
+</UserControl>

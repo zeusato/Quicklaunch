@@ -1,27 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <ApplicationIcon>Assets\APP.ico</ApplicationIcon>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks><ApplicationIcon>Assets\APP.ico</ApplicationIcon>
+    <Version>3.0.0</Version><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>false</SelfContained>
   </PropertyGroup>
-
   <ItemGroup>
-    <PackageReference Include="Serilog" Version="3.1.1" />
-    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="gong-wpf-dragdrop" Version="4.0.0" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.366" PrivateAssets="all" />
+    <PackageReference Include="VirtualizingWrapPanel" Version="2.5.4" />
     <Resource Include="Assets\APP.ico" />
+    <Compile Remove="Tests\**;artifacts\**" /><Page Remove="Tests\**;artifacts\**" /><None Remove="Tests\**" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Page Update="Views\ConfigWindow.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
-
-</Project>
+<ItemGroup Condition="'$(Configuration)' == 'Release'"><Page Remove="Views\DesignPreviewWindow.xaml"/><Compile Remove="Views\DesignPreviewWindow.xaml.cs"/></ItemGroup></Project>

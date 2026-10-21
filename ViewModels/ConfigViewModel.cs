@@ -1,260 +1,204 @@
-using QuickStartLauncher.Core;
+using System.Collections.ObjectModel;
+using System.Windows.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using QuickStartLauncher.Models;
 using QuickStartLauncher.Services;
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Windows;
-using System.Windows.Input;
-
-namespace QuickStartLauncher.ViewModels
+using QuickStartLauncher.Services.Apps;
+using QuickStartLauncher.Services.Browsers;
+using QuickStartLauncher.Services.Config;
+using QuickStartLauncher.Services.Launch;
+using QuickStartLauncher.Services.Startup;
+using Serilog;
+namespace QuickStartLauncher.ViewModels;
+public sealed partial class ConfigViewModel : ObservableObject
 {
-    public class ConfigViewModel : ViewModelBase
+    public IConfigService Config { get; }
+    private readonly ILaunchService launch;
+    private readonly IInstalledAppsService apps;
+    private readonly IBrowserService browsers;
+    private readonly IStartupService startup;
+    private readonly DispatcherTimer saveTimer;
+    public SettingsViewModel Settings { get; }
+    public ObservableCollection<ProfileItemViewModel> Profiles { get; } = [];
+    public ObservableCollection<BrowserChoiceViewModel> Browsers { get; } = [new(new("default", "Mặc định Windows", null))];
+    [ObservableProperty] private ProfileItemViewModel? selectedProfile;
+    [ObservableProperty] private ActionItemViewModel? selectedAction;
+    [ObservableProperty] private bool showSettings;
+    [ObservableProperty] private string saveStatus = "Đã lưu ✓";
+    [ObservableProperty] private bool isTesting;
+    public string? Warning => Config.Warning;
+    public event Action<bool>? PickerRequested;
+    public event Action? ProfilesReloaded;
+    private CancellationTokenSource? testCancellation;
+    private (ProfileItemViewModel Profile, List<(int Index, ActionItemViewModel Item)> Items)? undo;
+    private long editVersion;
+    public ConfigViewModel(IConfigService config, ILaunchService launch, IInstalledAppsService apps, IBrowserService browsers, IStartupService startup, ThemeService themes, AppPaths paths)
     {
-        private readonly IConfigService _configService;
-        private readonly IAppIndexService _appIndexService;
-        private readonly ILogService _logService;
-        private AppConfig _appConfig;
-
-        public ObservableCollection<Profile> Profiles { get; set; }
-        public List<IndexedApp> IndexedApps { get; private set; }
-        public ObservableCollection<string> BrowserProfiles { get; private set; }
-        private ObservableCollection<IndexedApp> _filteredApps;
-        public ObservableCollection<IndexedApp> FilteredApps
-        {
-            get => _filteredApps;
-            set
-            {
-                _filteredApps = value;
-                OnPropertyChanged();
-            }
-        }
-
-        private string _searchText = string.Empty;
-        public string SearchText
-        {
-            get => _searchText;
-            set
-            {
-                _searchText = value;
-                OnPropertyChanged();
-                FilterApps();
-            }
-        }
-
-        private Profile _activeProfile;
-        public Profile ActiveProfile
-        {
-            get => _activeProfile;
-            set
-            {
-                if (_activeProfile != value)
-                {
-                    _activeProfile = value;
-                    OnPropertyChanged();
-                    if (_appConfig != null) _appConfig.ActiveProfile = value.Name;
-                }
-            }
-        }
-
-        private ActionBase? _selectedAction;
-        public ActionBase? SelectedAction
-        {
-            get => _selectedAction;
-            set
-            {
-                _selectedAction = value;
-                OnPropertyChanged();
-                ((RelayCommand)RemoveActionCommand).RaiseCanExecuteChanged();
-            }
-        }
-
-        private Profile? _selectedProfileForEditing;
-        public Profile? SelectedProfileForEditing
-        {
-            get => _selectedProfileForEditing;
-            set
-            {
-                _selectedProfileForEditing = value;
-                OnPropertyChanged();
-                ((RelayCommand)RemoveProfileCommand).RaiseCanExecuteChanged();
-            }
-        }
-
-        public ICommand SaveCommand { get; }
-        public ICommand CancelCommand { get; }
-        public ICommand AddActionCommand { get; }
-        public ICommand RemoveActionCommand { get; }
-        public ICommand AddProfileCommand { get; }
-        public ICommand RemoveProfileCommand { get; }
-        public ICommand BrowseCommand { get; }
-
-        public ConfigViewModel(IConfigService configService, IAppIndexService appIndexService, ILogService logService)
-        {
-            _configService = configService;
-            _appIndexService = appIndexService;
-            _logService = logService;
-
-            _appConfig = _configService.LoadConfig();
-            Profiles = new ObservableCollection<Profile>(_appConfig.Profiles);
-            _activeProfile = Profiles.FirstOrDefault(p => p.Name == _appConfig.ActiveProfile) ?? Profiles.First();
-            IndexedApps = _appIndexService.GetIndexedAppsAsync().Result;
-            _filteredApps = new ObservableCollection<IndexedApp>(IndexedApps);
-            BrowserProfiles = new ObservableCollection<string>();
-
-            SaveCommand = new RelayCommand(SaveChanges);
-            CancelCommand = new RelayCommand(p => { if (p is Window w) w.Close(); });
-            AddActionCommand = new RelayCommand(AddAction);
-            RemoveActionCommand = new RelayCommand(RemoveAction, CanRemoveAction);
-            AddProfileCommand = new RelayCommand(AddProfile);
-            RemoveProfileCommand = new RelayCommand(RemoveProfile, CanRemoveProfile);
-            BrowseCommand = new RelayCommand(Browse);
-
-            foreach (var action in ActiveProfile.Actions)
-            {
-                action.PropertyChanged += OnActionPropertyChanged;
-            }
-        }
-
-        private void AddAction(object? parameter)
-        {
-            var newAction = new AppAction { Path = "New Action" };
-            newAction.PropertyChanged += OnActionPropertyChanged;
-            ActiveProfile.Actions.Add(newAction);
-            SelectedAction = newAction;
-        }
-
-        private void RemoveAction(object? parameter)
-        {
-            if (SelectedAction != null)
-            {
-                SelectedAction.PropertyChanged -= OnActionPropertyChanged;
-                ActiveProfile.Actions.Remove(SelectedAction);
-            }
-        }
-
-        private bool CanRemoveAction(object? parameter) => SelectedAction != null;
-
-        private void AddProfile(object? parameter)
-        {
-            var newProfile = new Profile { Name = "New Profile" };
-            Profiles.Add(newProfile);
-            _appConfig.Profiles.Add(newProfile);
-            SelectedProfileForEditing = newProfile;
-        }
-
-        private void RemoveProfile(object? parameter)
-        {
-            if (SelectedProfileForEditing != null && Profiles.Count > 1)
-            {
-                if (ActiveProfile == SelectedProfileForEditing)
-                {
-                    var newActiveProfile = Profiles.FirstOrDefault(p => p != SelectedProfileForEditing);
-                    if (newActiveProfile != null)
-                    {
-                        ActiveProfile = newActiveProfile;
-                    }
-                }
-                var profileToRemove = _appConfig.Profiles.FirstOrDefault(p => p.Name == SelectedProfileForEditing.Name);
-                if (profileToRemove != null)
-                {
-                    _appConfig.Profiles.Remove(profileToRemove);
-                }
-                Profiles.Remove(SelectedProfileForEditing);
-                SelectedProfileForEditing = null;
-            }
-        }
-
-        private bool CanRemoveProfile(object? parameter) => SelectedProfileForEditing != null && Profiles.Count > 1;
-
-        private void FilterApps()
-        {
-            if (string.IsNullOrWhiteSpace(SearchText))
-            {
-                FilteredApps = new ObservableCollection<IndexedApp>(IndexedApps);
-            }
-            else
-            {
-                FilteredApps = new ObservableCollection<IndexedApp>(
-                    IndexedApps.Where(app => app.AppName.Contains(SearchText, StringComparison.OrdinalIgnoreCase)));
-            }
-        }
-
-        private void SaveChanges(object? parameter)
-        {
-            // Remove empty actions before saving
-            foreach (var profile in _appConfig.Profiles)
-            {
-                var actionsToRemove = profile.Actions.Where(a =>
-                    (a is AppAction app && string.IsNullOrWhiteSpace(app.Path)) ||
-                    (a is CommandAction cmd && string.IsNullOrWhiteSpace(cmd.Command))
-                ).ToList();
-
-                foreach (var action in actionsToRemove)
-                {
-                    profile.Actions.Remove(action);
-                }
-            }
-
-            _logService.Info("Saving configuration changes.");
-            _configService.SaveConfig(_appConfig);
-
-            if (parameter is Window window)
-            {
-                window.Close();
-            }
-        }
-        private void Browse(object? parameter)
-        {
-            if (parameter is AppAction appAction)
-            {
-                var dialog = new Microsoft.Win32.OpenFileDialog
-                {
-                    Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*"
-                };
-
-                if (dialog.ShowDialog() == true)
-                {
-                    appAction.Path = dialog.FileName;
-                }
-            }
-        }
-
-        private void OnActionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            if (sender is AppAction appAction && e.PropertyName == nameof(AppAction.Path))
-            {
-                UpdateActionType(appAction, appAction.Path);
-            }
-            else if (sender is CommandAction commandAction && e.PropertyName == nameof(CommandAction.Command))
-            {
-                UpdateActionType(commandAction, commandAction.Command);
-            }
-        }
-
-        private void UpdateActionType(ActionBase oldAction, string input)
-        {
-            ActionBase newAction;
-            if (input.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || input.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-            {
-                if (oldAction is AppAction) return;
-                newAction = new AppAction { Path = input };
-            }
-            else
-            {
-                if (oldAction is CommandAction) return;
-                newAction = new CommandAction { Command = input };
-            }
-
-            var index = ActiveProfile.Actions.IndexOf(oldAction);
-            if (index != -1)
-            {
-                oldAction.PropertyChanged -= OnActionPropertyChanged;
-                newAction.PropertyChanged += OnActionPropertyChanged;
-                ActiveProfile.Actions[index] = newAction;
-                SelectedAction = newAction;
-            }
-        }
+        Config = config; this.launch = launch; this.apps = apps; this.browsers = browsers; this.startup = startup;
+        saveTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+        saveTimer.Tick += async (_, _) => await FlushAsync();
+        Settings = new(config, startup, themes, paths, apps, MarkDirty);
+        Reload(); _ = LoadBrowsersAsync();
     }
+    public void Reload()
+    {
+        foreach (var p in Profiles) p.Changed -= MarkDirty;
+        Profiles.Clear();
+        foreach (var p in Config.Current.Profiles) { var vm = new ProfileItemViewModel(p); vm.Changed += MarkDirty; Profiles.Add(vm); }
+        SelectedProfile = Profiles.FirstOrDefault(p => p.Id == Config.Current.ActiveProfileId) ?? Profiles.FirstOrDefault();
+        Settings.Reload(); OnPropertyChanged(nameof(Warning)); ProfilesReloaded?.Invoke();
+    }
+    private async Task LoadBrowsersAsync()
+    {
+        try
+        {
+            foreach (var b in await browsers.GetInstalledAsync())
+            {
+                var choice = new BrowserChoiceViewModel(b); Browsers.Add(choice);
+                choice.Icon = await apps.GetIconAsync(new(b.Aumid ?? b.ExePath ?? b.Id, b.Name, b.Aumid, b.ExePath, false, b.Id), 24);
+            }
+        }
+        catch (Exception ex) { SaveStatus = "Không đọc được trình duyệt: " + ex.Message; }
+    }
+    partial void OnSelectedProfileChanged(ProfileItemViewModel? value)
+    {
+        SelectedAction = value?.Actions.FirstOrDefault(); ShowSettings = false;
+        if (value is not null) foreach (var a in value.Actions) _ = a.LoadDetailsAsync(apps, browsers);
+    }
+    partial void OnSelectedActionChanged(ActionItemViewModel? value) { if (value is not null) _ = value.LoadDetailsAsync(apps, browsers); }
+    public void MarkDirty()
+    {
+        editVersion++; SaveStatus = "Đang chờ lưu…"; saveTimer.Stop(); saveTimer.Start(); Settings.RefreshPreview();
+    }
+    public async Task<bool> FlushAsync()
+    {
+        saveTimer.Stop();
+        var version = editVersion;
+        try
+        {
+            Config.Current.Profiles = Profiles.Select(p => p.Model).ToList();
+            await Config.SaveAsync(); startup.Apply(Config.Current.Settings.Startup);
+            SaveStatus = version == editVersion ? "Đã lưu ✓" : "Đang chờ lưu…"; return true;
+        }
+        catch (Exception ex) { SaveStatus = "Chưa lưu: " + ex.Message; Log.Error(ex, "Saving configuration failed"); return false; }
+    }
+    [RelayCommand] private void AddProfile()
+    {
+        var p = new Profile { Name = UniqueName("Profile mới") };
+        Config.Current.Profiles.Add(p); var vm = new ProfileItemViewModel(p); vm.Changed += MarkDirty; Profiles.Add(vm);
+        SelectedProfile = vm; Settings.Reload(); MarkDirty();
+    }
+    public string UniqueName(string name)
+    {
+        var result = name; var index = 2;
+        while (Profiles.Any(p => p.Name.Equals(result, StringComparison.OrdinalIgnoreCase))) result = $"{name} ({index++})";
+        return result;
+    }
+    [RelayCommand] private void DuplicateProfile()
+    {
+        if (SelectedProfile is null) return;
+        var p = ConfigJson.Clone(SelectedProfile.Model); p.Id = Guid.NewGuid(); p.Name = UniqueName(p.Name + " — bản sao");
+        foreach (var a in p.Actions) a.Id = Guid.NewGuid();
+        ImportProfile(p);
+    }
+    public void ImportProfile(Profile p)
+    {
+        p.Id = Guid.NewGuid(); p.Name = UniqueName(p.Name);
+        foreach (var a in p.Actions) a.Id = Guid.NewGuid();
+        var probe = AppConfig.CreateDefault(); probe.Profiles = [p]; probe.ActiveProfileId = p.Id; ConfigJson.Validate(probe);
+        Config.Current.Profiles.Add(p); var vm = new ProfileItemViewModel(p); vm.Changed += MarkDirty; Profiles.Add(vm);
+        SelectedProfile = vm; Settings.Reload(); MarkDirty();
+    }
+    public void DeleteProfile()
+    {
+        if (Profiles.Count <= 1 || SelectedProfile is null) return;
+        var p = SelectedProfile; p.Changed -= MarkDirty; Profiles.Remove(p); Config.Current.Profiles.Remove(p.Model);
+        Config.Current.Settings.Startup.ProfileIds.Remove(p.Id);
+        if (Config.Current.ActiveProfileId == p.Id) Config.Current.ActiveProfileId = Profiles[0].Id;
+        SelectedProfile = Profiles[0]; Settings.Reload(); MarkDirty();
+    }
+    [RelayCommand] private void SetDefault()
+    {
+        if (SelectedProfile is null) return; Config.Current.ActiveProfileId = SelectedProfile.Id; MarkDirty();
+    }
+    [RelayCommand] private void AddApps() => PickerRequested?.Invoke(false);
+    [RelayCommand] private void ChangeApp() => PickerRequested?.Invoke(true);
+    [RelayCommand] private void AddWebsite() => AddAction(new WebsiteAction { Name = "Website", Url = "https://" });
+    [RelayCommand] private void AddCommand() => AddAction(new CommandAction { Name = "Lệnh mới" });
+    [RelayCommand] private void AddDelay() => AddAction(new DelayAction { Name = "Chờ", Ms = 1500 });
+    public void AddAction(LaunchAction action)
+    {
+        if (SelectedProfile is null) return;
+        var vm = new ActionItemViewModel(action); SelectedProfile.Actions.Add(vm); SelectedAction = vm;
+    }
+    public void AddInstalledApps(IEnumerable<InstalledApp> selected, bool replace)
+    {
+        var list = selected.ToList();
+        if (replace && SelectedAction is { IsApp: true } action && list.Count > 0)
+        { action.ReplaceApp(list[0]); _ = action.LoadDetailsAsync(apps, browsers); return; }
+        foreach (var a in list) AddAction(new AppAction { Name = a.Name, Target = new() { Aumid = a.Aumid, Path = a.ExePath }, Browser = a.BrowserId is null ? null : new() });
+    }
+    [RelayCommand] private void DuplicateAction()
+    {
+        if (SelectedAction is null) return;
+        var copy = ConfigJson.Clone<LaunchAction>(SelectedAction.Model); copy.Id = Guid.NewGuid(); AddAction(copy);
+    }
+    public void DeleteActions(IEnumerable<ActionItemViewModel> items)
+    {
+        if (SelectedProfile is null) return;
+        var deleted = items.Distinct().Where(SelectedProfile.Actions.Contains).Select(a => (SelectedProfile.Actions.IndexOf(a), a)).OrderBy(x => x.Item1).ToList();
+        if (deleted.Count == 0) return;
+        undo = (SelectedProfile, deleted);
+        foreach (var (_, a) in deleted) SelectedProfile.Actions.Remove(a);
+        SelectedAction = SelectedProfile.Actions.FirstOrDefault();
+        SaveStatus = $"Đã xóa {deleted.Count} mục · Ctrl+Z để hoàn tác"; MarkDirty();
+    }
+    [RelayCommand] private void Undo()
+    {
+        if (undo is not { } u || !Profiles.Contains(u.Profile)) return;
+        SelectedProfile = u.Profile;
+        foreach (var (index, item) in u.Items) u.Profile.Actions.Insert(Math.Min(index, u.Profile.Actions.Count), item);
+        SelectedAction = u.Items[0].Item; undo = null;
+    }
+    [RelayCommand] private void MoveUp() => Move(-1);
+    [RelayCommand] private void MoveDown() => Move(1);
+    private void Move(int offset)
+    {
+        if (SelectedProfile is null || SelectedAction is null) return;
+        var i = SelectedProfile.Actions.IndexOf(SelectedAction); var next = i + offset;
+        if (next >= 0 && next < SelectedProfile.Actions.Count) SelectedProfile.Actions.Move(i, next);
+    }
+    [RelayCommand(AllowConcurrentExecutions = true)] private async Task TestActionAsync()
+    {
+        if (IsTesting) { testCancellation?.Cancel(); return; }
+        if (SelectedAction is null) return;
+        var action = SelectedAction; testCancellation = new(); IsTesting = true; action.State = RunState.Running;
+        try
+        {
+            var result = await launch.RunSingleAsync(ConfigJson.Clone<LaunchAction>(action.Model), testCancellation.Token);
+            action.State = result.State; action.Error = result.Error;
+            SaveStatus = result.State == RunState.Failed ? "Chạy thử lỗi: " + result.Error : "Chạy thử: " + result.State;
+        }
+        catch (OperationCanceledException) { action.State = RunState.Skipped; SaveStatus = "Đã hủy chạy thử."; }
+        finally { IsTesting = false; testCancellation.Dispose(); testCancellation = null; }
+    }
+    [RelayCommand(AllowConcurrentExecutions = true)] private async Task TestProfileAsync()
+    {
+        if (IsTesting) { testCancellation?.Cancel(); return; }
+        if (SelectedProfile is null) return;
+        var profile = SelectedProfile; testCancellation = new(); IsTesting = true;
+        try
+        {
+            await foreach (var result in launch.RunAsync(profile.Model, new(), testCancellation.Token))
+            {
+                var item = profile.Actions.FirstOrDefault(a => a.Model.Id == result.ActionId);
+                if (item is not null) { item.State = result.State; item.Error = result.Error; }
+            }
+            SaveStatus = $"Chạy thử xong · {profile.Actions.Count(a => a.State == RunState.Failed)} lỗi";
+        }
+        catch (OperationCanceledException) { SaveStatus = "Đã hủy chạy thử."; }
+        finally { IsTesting = false; testCancellation.Dispose(); testCancellation = null; }
+    }
+    public void Stop() { saveTimer.Stop(); testCancellation?.Cancel(); }
 }

@@ -6,3 +6,5 @@ artifacts/
 *.user
 *.suo
 TestResults/
+*.wpftmp.csproj
+*_wpftmp.csproj

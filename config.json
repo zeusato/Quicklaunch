@@ -1,27 +1,16 @@
 {
-  "activeProfile": "Default",
-  "profiles": [
-    {
-      "name": "Default",
-      "actions": [
-        {
-          "type": "app",
-          "name": "Notepad",
-          "path": "notepad.exe"
-        },
-        {
-          "type": "website",
-          "url": "https://github.com"
-        },
-        {
-          "type": "delay",
-          "ms": 2000
-        },
-        {
-          "type": "command",
-          "command": "cmd /c start ms-settings:"
-        }
-      ]
-    }
-  ]
+  "version": 3,
+  "settings": {
+    "theme": "system",
+    "startup": { "mode": "off", "profileIds": [], "delaySeconds": 10, "countdownSeconds": 5 },
+    "closeWhenDone": true, "closeDelayMs": 1200, "keepOpenOnError": true
+  },
+  "activeProfileId": "0aaf7663-9119-496a-b142-283b1c4b3252",
+  "profiles": [{
+    "id": "0aaf7663-9119-496a-b142-283b1c4b3252", "name": "Làm việc", "icon": "💼",
+    "actions": [
+      { "kind": "website", "id": "37fd8cc0-1c95-4675-8512-4c4492317242", "name": "Website mẫu", "enabled": false, "skipOnAutostart": false, "delayAfterMs": 0, "url": "https://example.org", "browserId": "default", "newWindow": false },
+      { "kind": "delay", "id": "a87b977e-c695-453d-8198-f6b58f75c83c", "name": "Chờ", "enabled": true, "skipOnAutostart": false, "delayAfterMs": 0, "ms": 500 }
+    ]
+  }]
 }

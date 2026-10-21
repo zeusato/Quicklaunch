@@ -1,0 +1,8 @@
+<ui:FluentWindow x:Class="QuickStartLauncher.Views.AutostartToast" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml" Title="QuickStart · Tự khởi động" Width="420" Height="220" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False" ExtendsContentIntoTitleBar="True" WindowCornerPreference="Round">
+ <Border Style="{StaticResource GlassCard}" Margin="12"><StackPanel>
+  <TextBlock Text="ϟ  QUICKSTART" Foreground="{DynamicResource Accent}" FontWeight="SemiBold" Margin="0,0,0,12"/>
+  <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold"/>
+  <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" Margin="0,8" MaxHeight="40"/>
+  <WrapPanel><Button Content="Mở ngay" Command="{Binding RunNowCommand}"/><Button Content="Hủy" Command="{Binding CancelCommand}"/><Button Content="Mở Launcher" Command="{Binding OpenLauncherCommand}"/></WrapPanel>
+ </StackPanel></Border>
+</ui:FluentWindow>

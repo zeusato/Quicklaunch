@@ -1,0 +1,34 @@
+<UserControl x:Class="QuickStartLauncher.Views.Pages.SettingsPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:dd="urn:gong-wpf-dragdrop">
+ <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4,0,12,0">
+  <TextBlock Text="Cài đặt" FontSize="26" FontWeight="SemiBold" Margin="0,0,0,16"/>
+  <Border Style="{StaticResource GlassCard}"><StackPanel>
+   <TextBlock Text="Khởi động cùng Windows" FontSize="18" FontWeight="SemiBold"/>
+   <WrapPanel Margin="0,12"><RadioButton Content="Không" IsChecked="{Binding StartupOff}" GroupName="Startup"/><RadioButton Content="Tự chạy" IsChecked="{Binding StartupRun}" GroupName="Startup"/><RadioButton Content="Chỉ mở Launcher" IsChecked="{Binding StartupShow}" GroupName="Startup"/></WrapPanel>
+   <StackPanel Visibility="{Binding IsAutoRun, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Profile tự chạy · kéo để sắp xếp hoặc dùng ↑ ↓" Style="{StaticResource Muted}"/>
+   <ListBox x:Name="StartupList" ItemsSource="{Binding StartupProfiles}" dd:DragDrop.IsDragSource="True" dd:DragDrop.IsDropTarget="True" dd:DragDrop.UseDefaultDragAdorner="True" MaxHeight="160">
+    <ListBox.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding Selected}"/></DataTemplate></ListBox.ItemTemplate>
+   </ListBox>
+   <WrapPanel><Button Content="↑" Click="MoveStartupUp" AutomationProperties.Name="Profile tự chạy lên"/><Button Content="↓" Click="MoveStartupDown" AutomationProperties.Name="Profile tự chạy xuống"/></WrapPanel>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <StackPanel Margin="0,0,12,0"><TextBlock Text="Trễ sau đăng nhập (0–120s)"/><TextBox Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Trễ sau đăng nhập giây"/></StackPanel>
+    <StackPanel Grid.Column="1"><TextBlock Text="Đếm ngược (0–15s)"/><TextBox Text="{Binding CountdownSeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Đếm ngược giây"/></StackPanel>
+   </Grid>
+   </StackPanel><TextBlock Text="{Binding Preview}" Foreground="{DynamicResource Accent}" Margin="0,4"/>
+   <TextBlock Text="{Binding StartupWarning}" Foreground="{DynamicResource State.Warning}"/><TextBlock Text="{Binding UacWarning}" Foreground="{DynamicResource State.Warning}"/>
+  </StackPanel></Border>
+  <Border Style="{StaticResource GlassCard}" Margin="0,12,0,0"><StackPanel>
+   <TextBlock Text="Sau khi chạy xong" FontSize="18" FontWeight="SemiBold"/>
+   <CheckBox Content="Tự đóng Launcher" IsChecked="{Binding CloseWhenDone}"/><CheckBox Content="Giữ cửa sổ khi có lỗi" IsChecked="{Binding KeepOpenOnError}"/>
+   <TextBlock Text="Thời gian giữ kết quả (ms)"/><TextBox Text="{Binding CloseDelayMs, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Thời gian giữ kết quả"/>
+   <TextBlock Text="Giao diện"/><ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" AutomationProperties.Name="Giao diện">
+    <ComboBox.ItemTemplate><DataTemplate><TextBlock><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="Text" Value="Hệ thống"/><Style.Triggers><DataTrigger Binding="{Binding}" Value="Light"><Setter Property="Text" Value="Sáng"/></DataTrigger><DataTrigger Binding="{Binding}" Value="Dark"><Setter Property="Text" Value="Tối"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></DataTemplate></ComboBox.ItemTemplate>
+   </ComboBox>
+  </StackPanel></Border>
+  <Border Style="{StaticResource GlassCard}" Margin="0,12,0,0"><StackPanel>
+   <TextBlock Text="Dữ liệu" FontSize="18" FontWeight="SemiBold"/>
+   <WrapPanel><Button Content="Thư mục config" Command="{Binding OpenConfigFolderCommand}"/><Button Content="Thư mục log" Command="{Binding OpenLogsCommand}"/><Button Content="Làm mới ứng dụng" Command="{Binding RefreshAppsCommand}"/></WrapPanel>
+   <WrapPanel><Button Content="Xuất toàn bộ config…" Click="ExportConfig"/><Button Content="Nhập toàn bộ config…" Click="ImportConfig"/></WrapPanel>
+   <TextBlock Text="QuickStart 3.0 · .NET 8 · WPF" Style="{StaticResource Muted}" Margin="0,12,0,0"/>
+  </StackPanel></Border>
+ </StackPanel></ScrollViewer>
+</UserControl>
