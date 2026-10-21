@@ -54,6 +54,8 @@ public sealed class SettingsViewModel : ObservableObject
                 $"Sau khi đăng nhập {DelaySeconds}s sẽ mở {actions.Count(a => a.Enabled && !a.SkipOnAutostart && a is not DelayAction)} mục từ {string.Join(", ", profiles.Select(p => p.Name))} ({actions.Count(a => !a.Enabled || a.SkipOnAutostart)} mục bị bỏ qua).";
         }
     }
+    /// <summary>Set by the app; null in tests.</summary>
+    public UpdateViewModel? Updates { get; set; }
     public RelayCommand OpenConfigFolderCommand { get; }
     public RelayCommand OpenLogsCommand { get; }
     public AsyncRelayCommand RefreshAppsCommand { get; }

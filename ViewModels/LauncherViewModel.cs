@@ -21,6 +21,8 @@ public sealed partial class LauncherViewModel(IConfigService config, ILaunchServ
     public bool CanSelectProfile => !IsRunning;
     public string BeginLabel => IsRunning ? "■  Hủy" : "▶  Begin";
     public string? Warning => config.Warning;
+    /// <summary>Set by the app; null in tests.</summary>
+    public UpdateViewModel? Updates { get; set; }
     public event Action? CloseRequested;
     public event Action<bool>? ConfigRequested;
     private CancellationTokenSource? cancellation;
@@ -33,8 +35,9 @@ public sealed partial class LauncherViewModel(IConfigService config, ILaunchServ
     }
     partial void OnSelectedProfileChanged(ProfileItemViewModel? value)
     {
+        // Selection here is per-session only: the default profile is owned by Config's "Đặt làm mặc định".
         if (value is null) return;
-        config.Current.ActiveProfileId = value.Id; Errors = value.Actions.Count(a => a.State == RunState.Failed); CanRetry = Errors > 0; Completed = value.Actions.Count(a => a.State is RunState.Done or RunState.Skipped or RunState.Failed);
+        Errors = value.Actions.Count(a => a.State == RunState.Failed); CanRetry = Errors > 0; Completed = value.Actions.Count(a => a.State is RunState.Done or RunState.Skipped or RunState.Failed);
         Total = value.Actions.Count;
         _ = LoadIconsAsync(value);
     }

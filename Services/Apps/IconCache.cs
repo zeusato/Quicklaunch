@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
@@ -20,7 +21,8 @@ public sealed class IconCache(AppPaths paths)
         await limit.WaitAsync();
         try
         {
-            var key = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes($"{app.Key}:{size}")));
+            // "v3" invalidates PNGs written before alpha was preserved (they have black backgrounds).
+            var key = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes($"v3:{app.Key}:{size}")));
             var file = Path.Combine(paths.IconDirectory, key + ".png");
             return await ShellInterop.OnSta<ImageSource?>(() =>
             {
@@ -40,7 +42,7 @@ public sealed class IconCache(AppPaths paths)
                     var target = !string.IsNullOrWhiteSpace(app.Aumid) ? @"shell:AppsFolder\" + app.Aumid : app.ExePath!;
                     ShellInterop.SHCreateItemFromParsingName(target, 0, typeof(IShellItem).GUID, out item);
                     ((IShellItemImageFactory)item).GetImage(new() { Width = size, Height = size }, 0x5, out handle);
-                    var source = Imaging.CreateBitmapSourceFromHBitmap(handle, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    var source = FromShellBitmap(handle);
                     source.Freeze();
                     try
                     {
@@ -60,5 +62,34 @@ public sealed class IconCache(AppPaths paths)
             });
         }
         finally { limit.Release(); }
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAP { public int Type, Width, Height, WidthBytes; public ushort Planes, BitsPixel; public nint Bits; }
+    [DllImport("gdi32.dll")] private static extern int GetObject(nint handle, int size, out BITMAP bitmap);
+    // Imaging.CreateBitmapSourceFromHBitmap ignores the alpha channel of the shell's 32bpp DIB section,
+    // which turns transparent icon backgrounds black. Copy the premultiplied BGRA bits ourselves instead.
+    private static BitmapSource FromShellBitmap(nint handle)
+    {
+        if (GetObject(handle, Marshal.SizeOf<BITMAP>(), out var bm) == 0 || bm.BitsPixel != 32 || bm.Bits == 0)
+            return Imaging.CreateBitmapSourceFromHBitmap(handle, 0, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+        var height = Math.Abs(bm.Height); var stride = bm.WidthBytes;
+        var pixels = new byte[stride * height];
+        Marshal.Copy(bm.Bits, pixels, 0, pixels.Length);
+        // Most shell bitmaps are premultiplied, but some legacy icons come back with straight alpha
+        // (colour channels > alpha). Treating those as premultiplied paints their transparent area white.
+        bool hasAlpha = false, premultiplied = true;
+        for (var i = 3; i < pixels.Length; i += 4)
+        {
+            var a = pixels[i]; if (a != 0) hasAlpha = true;
+            if (pixels[i - 1] > a || pixels[i - 2] > a || pixels[i - 3] > a) premultiplied = false;
+        }
+        if (bm.Height > 0)
+        {
+            // Bottom-up DIB: flip rows so the icon isn't upside down.
+            var flipped = new byte[pixels.Length];
+            for (var row = 0; row < height; row++) Buffer.BlockCopy(pixels, row * stride, flipped, (height - 1 - row) * stride, stride);
+            pixels = flipped;
+        }
+        return BitmapSource.Create(bm.Width, height, 96, 96, !hasAlpha ? PixelFormats.Bgr32 : premultiplied ? PixelFormats.Pbgra32 : PixelFormats.Bgra32, null, pixels, stride);
     }
 }

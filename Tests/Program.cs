@@ -39,6 +39,8 @@ internal static class Program
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri($"/QuickStartLauncher;component/Themes/{file}.xaml", UriKind.Relative) });
         app.Resources["BoolVisibility"] = new BoolVisibilityConverter();
         app.Resources["StateBrush"] = new StateBrushConverter();
+        app.Resources["NullVisibility"] = new NullVisibilityConverter();
+        app.Resources["EmptyVisibility"] = new EmptyVisibilityConverter();
         app.DispatcherUnhandledException += (_, e) => { failures.Add("UI unhandled: " + e.Exception); Console.WriteLine(e.Exception); File.WriteAllText(Path.Combine(output, "ui-failure.txt"), e.Exception.ToString()); e.Handled = true; app.Shutdown(1); };
         app.Startup += async (_, _) =>
         {
@@ -184,6 +186,22 @@ internal static class Program
         autoVm = new(autoConfig, autoLaunch); var openedLauncher = false; autoVm.Finished += open => openedLauncher = open;
         autoTask = autoVm.StartAsync(); autoVm.OpenLauncherCommand.Execute(null); await autoTask;
         Check(openedLauncher && autoProcesses.Started.Count == 2, "toast open launcher cancels countdown");
+        var launcherVm = new LauncherViewModel(autoConfig, autoLaunch, fakeApps, new FakeBrowsers()); launcherVm.Reload();
+        launcherVm.SelectedProfile = launcherVm.Profiles[1];
+        Check(autoConfig.Current.ActiveProfileId == p1.Id, "launcher profile switch does not overwrite default profile");
+        autoConfig.Current.Settings.Startup.ProfileIds = [];
+        autoVm = new(autoConfig, autoLaunch); bool? emptyFinished = null; autoVm.Finished += open => emptyFinished = open;
+        await autoVm.StartAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        Check(emptyFinished == true && autoProcesses.Started.Count == 2, "autostart with no profiles hands over to launcher");
+        autoConfig.Current.Settings.Startup.ProfileIds = [p1.Id, p2.Id];
+        var releaseJson = JsonDocument.Parse("""{"tag_name":"v3.2.1","draft":false,"prerelease":false,"html_url":"https://x/r","body":"n","assets":[{"name":"QuickStartLauncher-win-x64.zip","browser_download_url":"https://x/z"},{"name":"QuickStartLauncher-win-x64.zip.sha256","browser_download_url":"https://x/s"}]}""").RootElement;
+        var parsed = QuickStartLauncher.Services.Update.UpdateService.Parse(releaseJson);
+        Check(parsed is { Version.Major: 3, Version.Minor: 2, Version.Build: 1, ZipUrl: "https://x/z", Sha256Url: "https://x/s" }, "update release parsed (tag, zip, sha256)");
+        var preJson = JsonDocument.Parse("""{"tag_name":"v9.0.0","prerelease":true,"html_url":"","assets":[{"name":"QuickStartLauncher-win-x64.zip","browser_download_url":"https://x/z"}]}""").RootElement;
+        Check(QuickStartLauncher.Services.Update.UpdateService.Parse(preJson) is null, "prerelease ignored by updater");
+        var forwardPaths = new AppPaths(Path.Combine(output, "forward-" + Guid.NewGuid().ToString("N")));
+        QuickStartLauncher.App.ForwardArgs(forwardPaths, ["--profile", "Làm việc"]);
+        Check(QuickStartLauncher.App.TakeForwardedArgs(forwardPaths).SequenceEqual(new[] { "--profile", "Làm việc" }) && QuickStartLauncher.App.TakeForwardedArgs(forwardPaths).Length == 0, "second instance args forwarded once");
         var realPaths = new AppPaths(Path.Combine(output, "shell-cache"));
         var realApps = new ShellAppsFolderProvider(realPaths, new IconCache(realPaths));
         watch.Restart(); var installed = await realApps.GetAppsAsync(true);
@@ -247,6 +265,9 @@ internal static class Program
         edit.Settings.DelaySeconds = 3;
         await edit.FlushAsync();
         Check(startup.Last?.Mode == StartupMode.RunProfiles && config.Current.Settings.Startup.ProfileIds.Count == 1, "settings persist selected startup profiles");
+        startup.Throw = true; edit.MarkDirty();
+        Check(await edit.FlushAsync() && edit.SaveStatus.StartsWith("Đã lưu"), "startup registry failure does not report config as unsaved");
+        startup.Throw = false;
         theme.Apply(ThemeMode.Dark);
                 edit.ShowSettings = false;
         edit.AddWebsiteCommand.Execute(null); edit.SelectedAction!.Url = "https://example.org"; await Task.Delay(100); Render(window, "editor-website");
@@ -325,8 +346,9 @@ internal sealed class FakeProcess : IProcessLauncher
 internal sealed class FakeStartup : IStartupService
 {
     public StartupSettings? Last;
+    public bool Throw;
     public bool IsBlockedByWindows => false;
-    public void Apply(StartupSettings settings) => Last = settings;
+    public void Apply(StartupSettings settings) { if (Throw) throw new UnauthorizedAccessException("registry denied"); Last = settings; }
 }
 internal sealed class BindingTrace : TraceListener
 {

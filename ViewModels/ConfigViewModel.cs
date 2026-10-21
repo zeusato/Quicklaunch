@@ -27,6 +27,8 @@ public sealed partial class ConfigViewModel : ObservableObject
     [ObservableProperty] private bool showSettings;
     [ObservableProperty] private string saveStatus = "Đã lưu ✓";
     [ObservableProperty] private bool isTesting;
+    [ObservableProperty] private bool canUndo;
+    [ObservableProperty] private string undoText = "";
     public string? Warning => Config.Warning;
     public event Action<bool>? PickerRequested;
     public event Action? ProfilesReloaded;
@@ -78,10 +80,17 @@ public sealed partial class ConfigViewModel : ObservableObject
         try
         {
             Config.Current.Profiles = Profiles.Select(p => p.Model).ToList();
-            await Config.SaveAsync(); startup.Apply(Config.Current.Settings.Startup);
-            SaveStatus = version == editVersion ? "Đã lưu ✓" : "Đang chờ lưu…"; return true;
+            await Config.SaveAsync();
         }
         catch (Exception ex) { SaveStatus = "Chưa lưu: " + ex.Message; Log.Error(ex, "Saving configuration failed"); return false; }
+        // The config is on disk at this point; a registry failure must not be reported as an unsaved config.
+        try { startup.Apply(Config.Current.Settings.Startup); }
+        catch (Exception ex)
+        {
+            SaveStatus = "Đã lưu ✓ · không cập nhật được khởi động cùng Windows: " + ex.Message;
+            Log.Warning(ex, "Startup registration failed after save"); return true;
+        }
+        SaveStatus = version == editVersion ? "Đã lưu ✓" : "Đang chờ lưu…"; return true;
     }
     [RelayCommand] private void AddProfile()
     {
@@ -152,6 +161,7 @@ public sealed partial class ConfigViewModel : ObservableObject
         undo = (SelectedProfile, deleted);
         foreach (var (_, a) in deleted) SelectedProfile.Actions.Remove(a);
         SelectedAction = SelectedProfile.Actions.FirstOrDefault();
+        UndoText = deleted.Count == 1 ? $"Đã xóa “{deleted[0].a.Name}”" : $"Đã xóa {deleted.Count} mục"; CanUndo = true;
         SaveStatus = $"Đã xóa {deleted.Count} mục · Ctrl+Z để hoàn tác"; MarkDirty();
     }
     [RelayCommand] private void Undo()
@@ -159,7 +169,7 @@ public sealed partial class ConfigViewModel : ObservableObject
         if (undo is not { } u || !Profiles.Contains(u.Profile)) return;
         SelectedProfile = u.Profile;
         foreach (var (index, item) in u.Items) u.Profile.Actions.Insert(Math.Min(index, u.Profile.Actions.Count), item);
-        SelectedAction = u.Items[0].Item; undo = null;
+        SelectedAction = u.Items[0].Item; undo = null; CanUndo = false;
     }
     [RelayCommand] private void MoveUp() => Move(-1);
     [RelayCommand] private void MoveDown() => Move(1);

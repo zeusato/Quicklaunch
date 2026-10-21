@@ -8,6 +8,7 @@ using QuickStartLauncher.Services.Browsers;
 using QuickStartLauncher.Services.Config;
 using QuickStartLauncher.Services.Launch;
 using QuickStartLauncher.Services.Startup;
+using QuickStartLauncher.Services.Update;
 using QuickStartLauncher.ViewModels;
 using QuickStartLauncher.Views;
 using Serilog;
@@ -30,13 +31,31 @@ public partial class App : Application
         var watch = Stopwatch.StartNew();
         try
         {
-            activation = new(false, EventResetMode.AutoReset, @"Global\QuickStartLauncher.Activate");
-            instance = new(true, @"Global\QuickStartLauncher.SingleInstance", out ownsMutex);
-            if (!ownsMutex) { activation.Set(); Shutdown(); return; }
+            // Self-update, step 2: this is the staged "exe.new". Swap it in and hand over; no UI, no mutex.
+            int? WaitPid() { var i = Array.IndexOf(e.Args, "--wait-pid"); return i >= 0 && i + 1 < e.Args.Length && int.TryParse(e.Args[i + 1], out var pid) ? pid : null; }
+            if (e.Args.Contains("--apply-update"))
+            {
+                var applyPaths = new AppPaths(); Directory.CreateDirectory(applyPaths.LogDirectory);
+                Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
+                    .WriteTo.File(Path.Combine(applyPaths.LogDirectory, ".log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14, shared: true).CreateLogger();
+                Log.Information("Applying staged update");
+                var target = UpdateService.ApplyStaged(WaitPid());
+                Process.Start(new ProcessStartInfo(target, $"--updated --wait-pid {Environment.ProcessId}") { UseShellExecute = false });
+                Log.CloseAndFlush(); Shutdown(); return;
+            }
+            // Step 3: the real exe after an update removes the staged copy and stale extraction folders.
+            var updated = e.Args.Contains("--updated");
+            // Local\ = per Windows logon session, so another user (fast user switching) runs their own instance.
+            activation = new(false, EventResetMode.AutoReset, @"Local\QuickStartLauncher.Activate");
+            instance = new(true, @"Local\QuickStartLauncher.SingleInstance", out ownsMutex);
             var paths = new AppPaths();
+            if (!ownsMutex) { ForwardArgs(paths, e.Args); activation.Set(); Shutdown(); return; }
             Directory.CreateDirectory(paths.LogDirectory);
             Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
-                .WriteTo.File(Path.Combine(paths.LogDirectory, ".log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14).CreateLogger();
+                .WriteTo.File(Path.Combine(paths.LogDirectory, ".log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14, shared: true).CreateLogger();
+            TakeForwardedArgs(paths); // drop leftovers from a second launch that raced a previous shutdown
+            if (updated) UpdateService.CleanupAfterUpdate(WaitPid()); // step 3: drop exe.new + stale extractions
+            else _ = Task.Run(UpdateService.CleanOldExtractions); // also covers manual upgrades from a zip
             DispatcherUnhandledException += (_, args) =>
             {
                 Log.Error(args.Exception, "Unhandled UI error"); args.Handled = true;
@@ -49,19 +68,16 @@ public partial class App : Application
                 .AddSingleton<IInstalledAppsService, ShellAppsFolderProvider>().AddSingleton<IBrowserService, BrowserCatalog>()
                 .AddSingleton<IProcessLauncher, ProcessLauncher>().AddSingleton<ILaunchService, LaunchService>()
                 .AddSingleton<IStartupService, StartupService>().AddSingleton<ThemeService>()
+                .AddSingleton<IUpdateService, UpdateService>().AddSingleton<UpdateViewModel>()
                 .AddTransient<LauncherViewModel>().AddTransient<ConfigViewModel>().AddTransient<AutostartToastViewModel>();
             services = collection.BuildServiceProvider();
+            services.GetRequiredService<UpdateViewModel>().RestartRequested += exe => _ = RestartAfterUpdateAsync(exe);
             var config = services.GetRequiredService<IConfigService>(); config.Load();
             Themes.Apply(config.Current.Settings.Theme);
             if (!config.IsReadOnly)
                 try { services.GetRequiredService<IStartupService>().Apply(config.Current.Settings.Startup); }
                 catch (Exception ex) { Log.Warning(ex, "Startup registration unavailable"); }
-            wait = ThreadPool.RegisterWaitForSingleObject(activation, (_, _) => Dispatcher.BeginInvoke(() =>
-            {
-                startupDelay.Cancel();
-                if (configWindow is { IsVisible: true }) { configWindow.WindowState = WindowState.Normal; configWindow.Activate(); }
-                else { toast?.Close(); toast = null; ShowLauncher(); }
-            }), null, Timeout.Infinite, false);
+            wait = ThreadPool.RegisterWaitForSingleObject(activation, (_, _) => Dispatcher.BeginInvoke(() => OnActivated(TakeForwardedArgs(paths))), null, Timeout.Infinite, false);
             var args = e.Args;
             _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => _ = ResolveAppTargetsAsync()));
             #if DEBUG
@@ -82,14 +98,8 @@ public partial class App : Application
             else
             {
                 ShowLauncher();
-                var index = Array.IndexOf(args, "--profile");
-                if (index >= 0)
-                {
-                    var name = index + 1 < args.Length ? args[index + 1] : "";
-                    var profile = launcher!.ViewModel.Profiles.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || p.Id.ToString().Equals(name, StringComparison.OrdinalIgnoreCase));
-                    if (profile is null) launcher.ViewModel.Status = "Không tìm thấy profile: " + name;
-                    else { launcher.ViewModel.SelectedProfile = profile; await launcher.ViewModel.RunAsync(profile.Model); }
-                }
+                if (updated) launcher!.ViewModel.Status = $"Đã cập nhật lên v{services.GetRequiredService<IUpdateService>().CurrentVersion} ✓";
+                await RunProfileArgAsync(args);
             }
             Log.Information("Startup flow completed in {Elapsed} ms", watch.ElapsedMilliseconds);
 
@@ -99,11 +109,64 @@ public partial class App : Application
             Log.Fatal(ex, "Startup failed"); MessageBox.Show(ex.ToString(), "QuickStart · Không khởi động được"); Shutdown(1);
         }
     }
+    private async void OnActivated(string[] args)
+    {
+        try
+        {
+            // An autostart run in progress keeps going; a second launch only brings its toast forward.
+            if (toast is not null) { toast.Activate(); return; }
+            startupDelay.Cancel();
+            if (args.Contains("--config")) { ShowConfig(); return; }
+            if (configWindow is { IsVisible: true }) { configWindow.WindowState = WindowState.Normal; configWindow.Activate(); return; }
+            ShowLauncher();
+            await RunProfileArgAsync(args);
+        }
+        catch (Exception ex) { Log.Error(ex, "Handling activation from a second instance failed"); }
+    }
+    private async Task RunProfileArgAsync(string[] args)
+    {
+        var index = Array.IndexOf(args, "--profile");
+        if (index < 0 || launcher is null) return;
+        var name = index + 1 < args.Length ? args[index + 1] : "";
+        var profile = launcher.ViewModel.Profiles.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || p.Id.ToString().Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (profile is null) launcher.ViewModel.Status = "Không tìm thấy profile: " + name;
+        else if (launcher.ViewModel.IsRunning) launcher.ViewModel.Status = "Đang chạy, thử lại sau khi xong.";
+        else { launcher.ViewModel.SelectedProfile = profile; await launcher.ViewModel.RunAsync(profile.Model); }
+    }
+    private async Task RestartAfterUpdateAsync(string exe)
+    {
+        try
+        {
+            if (configWindow is not null) await configWindow.ViewModel.FlushAsync();
+            var config = services!.GetRequiredService<IConfigService>(); if (!config.IsReadOnly) await config.SaveAsync();
+        }
+        catch (Exception ex) { Log.Error(ex, "Save before update restart failed"); }
+        Process.Start(new ProcessStartInfo(exe, $"--apply-update --wait-pid {Environment.ProcessId}") { UseShellExecute = false });
+        Shutdown();
+    }
+    public static string ForwardFile(AppPaths paths) => Path.Combine(paths.Root, "activate.args.json");
+    public static void ForwardArgs(AppPaths paths, string[] args)
+    {
+        try { Directory.CreateDirectory(paths.Root); File.WriteAllText(ForwardFile(paths), System.Text.Json.JsonSerializer.Serialize(args)); }
+        catch (Exception ex) { Debug.WriteLine(ex); /* Still activate; the args are just lost. */ }
+    }
+    public static string[] TakeForwardedArgs(AppPaths paths)
+    {
+        try
+        {
+            var file = ForwardFile(paths);
+            if (!File.Exists(file)) return [];
+            var args = System.Text.Json.JsonSerializer.Deserialize<string[]>(File.ReadAllText(file)) ?? [];
+            File.Delete(file); return args;
+        }
+        catch (Exception ex) { Log.Warning(ex, "Could not read forwarded arguments"); return []; }
+    }
     private void ShowLauncher()
     {
         if (launcher is null)
         {
             var vm = services!.GetRequiredService<LauncherViewModel>(); vm.Reload();
+            vm.Updates = services!.GetRequiredService<UpdateViewModel>(); _ = vm.Updates.AutoCheckAsync();
             launcher = new(vm); Themes.Attach(launcher);
             launcher.ContentRendered += (_, _) => Log.Information("Launcher first render from process start: {Elapsed} ms", (DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds);
             vm.CloseRequested += () => launcher?.Close();
@@ -122,6 +185,7 @@ public partial class App : Application
         if (configWindow is null)
         {
             var vm = services!.GetRequiredService<ConfigViewModel>();
+            vm.Settings.Updates = services!.GetRequiredService<UpdateViewModel>();
             configWindow = new(vm, services!.GetRequiredService<IInstalledAppsService>()); Themes.Attach(configWindow);
             configWindow.Closed += (_, _) =>
             {

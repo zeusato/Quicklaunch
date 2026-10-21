@@ -22,9 +22,15 @@ public sealed partial class AutostartToastViewModel(IConfigService config, ILaun
         var profiles = config.Current.Settings.Startup.ProfileIds.Select(id => config.Current.Profiles.FirstOrDefault(p => p.Id == id)).OfType<Profile>().ToArray();
         var count = profiles.SelectMany(p => p.Actions).Count(a => a.Enabled && !a.SkipOnAutostart && a is not DelayAction);
         Detail = string.Join(" · ", profiles.Select(p => p.Name));
-        if (profiles.Length == 0) { Title = "Chưa chọn profile tự chạy"; HasErrors = true; return; }
         try
         {
+            if (profiles.Length == 0)
+            {
+                // Nothing to run: explain briefly, then hand over to the Launcher instead of leaving the toast stuck.
+                Title = "Chưa chọn profile tự chạy"; Detail = "Đang mở Launcher để bạn chọn…"; HasErrors = true;
+                await Task.Delay(Math.Max(config.Current.Settings.CloseDelayMs, 2500), cancellation.Token);
+                Finished?.Invoke(true); return;
+            }
             for (var seconds = config.Current.Settings.Startup.CountdownSeconds; seconds > 0 && !begin.Task.IsCompleted; seconds--)
             {
                 Title = $"Mở {count} mục sau {seconds}s…";

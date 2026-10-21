@@ -4,6 +4,6 @@
       <ui:ThemesDictionary Theme="Dark"/><ui:ControlsDictionary/>
       <ResourceDictionary Source="Themes/Glass.Colors.xaml"/><ResourceDictionary Source="Themes/Glass.Controls.xaml"/><ResourceDictionary Source="Themes/Glass.Animations.xaml"/>
     </ResourceDictionary.MergedDictionaries>
-    <conv:BoolVisibilityConverter x:Key="BoolVisibility"/><conv:StateBrushConverter x:Key="StateBrush"/>
+    <conv:BoolVisibilityConverter x:Key="BoolVisibility"/><conv:StateBrushConverter x:Key="StateBrush"/><conv:NullVisibilityConverter x:Key="NullVisibility"/><conv:EmptyVisibilityConverter x:Key="EmptyVisibility"/>
   </ResourceDictionary></Application.Resources>
 </Application>

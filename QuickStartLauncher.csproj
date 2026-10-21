@@ -7,6 +7,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks><ApplicationIcon>Assets\APP.ico</ApplicationIcon>
     <Version>3.0.0</Version><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>false</SelfContained>
   </PropertyGroup>
+  <!-- Release ships a single portable exe: no .pdb, nothing but the binary in the zip. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType><DebugSymbols>false</DebugSymbols><GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="4.3.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

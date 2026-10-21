@@ -1,4 +1,4 @@
 <UserControl x:Class="QuickStartLauncher.Views.Editors.DelayActionEditor" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
- <StackPanel><TextBlock Text="Thời gian chờ (0–60000 ms)"/><Slider Minimum="0" Maximum="60000" TickFrequency="100" IsSnapToTickEnabled="True" Value="{Binding Ms}" Margin="0,12" AutomationProperties.Name="Thời gian chờ"/>
+ <StackPanel><TextBlock Text="Thời gian chờ (0–60000 ms)" Style="{StaticResource FieldLabel}"/><Slider Minimum="0" Maximum="60000" TickFrequency="100" IsSnapToTickEnabled="True" Value="{Binding Ms}" Margin="0,12" AutomationProperties.Name="Thời gian chờ"/>
  <TextBox Text="{Binding Ms, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Thời gian chờ mili giây"/></StackPanel>
 </UserControl>

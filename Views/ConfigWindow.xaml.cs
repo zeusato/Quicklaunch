@@ -52,13 +52,24 @@ public partial class ConfigWindow : FluentWindow
     }
     private void ProfileContextOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
     {
-        if (sender is not System.Windows.Controls.ListBox list) return;
-        var menu = list.ContextMenu; menu.Items.Clear();
+        if (sender is System.Windows.Controls.ListBox list) FillProfileMenu(list.ContextMenu);
+    }
+    private void ProfileMenuClick(object sender, RoutedEventArgs e)
+    {
+        var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = (UIElement)sender, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        FillProfileMenu(menu); menu.IsOpen = true;
+    }
+    private void FillProfileMenu(System.Windows.Controls.ContextMenu menu)
+    {
+        menu.Items.Clear();
         void Add(string title, Action click) { var item = new System.Windows.Controls.MenuItem { Header = title }; item.Click += (_, _) => click(); menu.Items.Add(item); }
-        Add("Đổi tên", () => { ProfileName.Focus(); ProfileName.SelectAll(); });
+        Add("Đổi tên", () => { ViewModel.ShowSettings = false; ProfileName.Focus(); ProfileName.SelectAll(); });
         Add("Nhân bản", () => ViewModel.DuplicateProfileCommand.Execute(null));
         Add("Đặt làm mặc định", () => ViewModel.SetDefaultCommand.Execute(null));
+        menu.Items.Add(new System.Windows.Controls.Separator());
+        Add("Nhập profile…", () => ImportProfileClick(this, new()));
         Add("Xuất JSON…", () => ExportProfileClick(this, new()));
+        menu.Items.Add(new System.Windows.Controls.Separator());
         Add("Xóa profile", () => DeleteProfileClick(this, new()));
     }
     private void DeleteProfileClick(object sender, RoutedEventArgs e)

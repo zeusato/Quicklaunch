@@ -33,7 +33,7 @@ public sealed partial class ActionItemViewModel : ObservableObject
     public bool IsBrowser => Model is AppAction { Browser: not null };
     public string KindLabel => Model switch { AppAction => "ỨNG DỤNG", WebsiteAction => "WEBSITE", CommandAction => "LỆNH", _ => "CHỜ" };
     public string FallbackIcon => Model switch { AppAction => "▣", WebsiteAction => "↗", CommandAction => "⌘", _ => "◷" };
-    public string StatusGlyph => State switch { RunState.Running => "◌", RunState.Done => "✓", RunState.Failed => "✕", RunState.Skipped => "–", _ => "·" };
+    public string StatusGlyph => State switch { RunState.Running => "◌", RunState.Done => "✓", RunState.Failed => "✕", RunState.Skipped => "–", _ => "" };
     public string Name { get => Model.Name; set => Update(value, Model.Name, v => Model.Name = v); }
     public bool Enabled { get => Model.Enabled; set => Update(value, Model.Enabled, v => Model.Enabled = v); }
     public bool SkipOnAutostart { get => Model.SkipOnAutostart; set => Update(value, Model.SkipOnAutostart, v => Model.SkipOnAutostart = v); }
