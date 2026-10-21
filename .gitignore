@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+.claude/
+artifacts/
+*.user
+*.suo
+TestResults/

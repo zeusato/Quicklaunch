@@ -1,0 +1,27 @@
+{
+  "activeProfile": "Default",
+  "profiles": [
+    {
+      "name": "Default",
+      "actions": [
+        {
+          "type": "app",
+          "name": "Notepad",
+          "path": "notepad.exe"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com"
+        },
+        {
+          "type": "delay",
+          "ms": 2000
+        },
+        {
+          "type": "command",
+          "command": "cmd /c start ms-settings:"
+        }
+      ]
+    }
+  ]
+}
