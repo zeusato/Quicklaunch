@@ -129,7 +129,11 @@ internal static class Program
         var watch = Stopwatch.StartNew(); var progress = new List<RunProgress>();
         await foreach (var p in launch.RunAsync(sequence, new(true), CancellationToken.None)) progress.Add(p);
         Check(progress.Count(p => p.State == RunState.Failed) == 1 && processes.Started.Count == 2, "failure isolation and autostart skip/disabled");
-        Check(progress.Where(p => p.State is RunState.Done or RunState.Failed or RunState.Skipped).Select(p => p.ActionId).SequenceEqual(sequence.Actions.Select(a => a.Id)), "sequential action order");
+        Check(progress.Any(p => p.ActionId == sequence.Actions[2].Id && p.State == RunState.Skipped), "autostart skips explicit delay actions");
+        var manualSequence = new Profile { Actions = sequence.Actions.Where(a => !a.SkipOnAutostart).ToList() };
+        progress.Clear(); processes.Started.Clear(); watch.Restart();
+        await foreach (var p in launch.RunAsync(manualSequence, new(), CancellationToken.None)) progress.Add(p);
+        Check(progress.Where(p => p.State is RunState.Done or RunState.Failed or RunState.Skipped).Select(p => p.ActionId).SequenceEqual(manualSequence.Actions.Select(a => a.Id)), "manual run retains sequential action order");
         Check(watch.ElapsedMilliseconds >= 220 && watch.ElapsedMilliseconds < 600, "delay + delayAfter timing ±150 ms allowance");
         Check(progress.Any(p => p.RemainingMs > 0), "delay countdown progress");
         var cmd = processes.Started.Last(); Check(!cmd.UseShellExecute && cmd.CreateNoWindow && cmd.WindowStyle == ProcessWindowStyle.Hidden, "hidden command has no console");
@@ -178,14 +182,15 @@ internal static class Program
         var autoProcesses = new FakeProcess();
         var autoLaunch = new LaunchService(fakeApps, new FakeBrowsers(), autoProcesses);
         var autoVm = new AutostartToastViewModel(autoConfig, autoLaunch);
-        var autoTask = autoVm.StartAsync(); autoVm.CancelCommand.Execute(null); await autoTask;
-        Check(autoProcesses.Started.Count == 0, "toast cancel opens nothing");
-        autoVm = new(autoConfig, autoLaunch); autoTask = autoVm.StartAsync(); autoVm.RunNowCommand.Execute(null); await autoTask;
-        Check(autoProcesses.Started.Select(p => p.Arguments).SequenceEqual(new[] { "/d /c A", "/d /c B" }), "autostart ordered profiles and skip flag");
+        autoVm.CancelCommand.Execute(null); await autoVm.StartAsync();
+        Check(autoProcesses.Started.Count == 0, "toast cancelled before dispatch opens nothing");
+        autoVm = new(autoConfig, autoLaunch); await autoVm.StartAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        Check(autoProcesses.Started.Select(p => p.Arguments).Order().SequenceEqual(new[] { "/d /c A", "/d /c B" }), "autostart dispatches all profiles without legacy countdown");
         Check(autoVm.Results.Values.Count(p => p.State == RunState.Skipped) == 1, "toast retains per-action status");
         autoVm = new(autoConfig, autoLaunch); var openedLauncher = false; autoVm.Finished += open => openedLauncher = open;
-        autoTask = autoVm.StartAsync(); autoVm.OpenLauncherCommand.Execute(null); await autoTask;
-        Check(openedLauncher && autoProcesses.Started.Count == 2, "toast open launcher cancels countdown");
+        autoVm.OpenLauncherCommand.Execute(null); await autoVm.StartAsync();
+        Check(openedLauncher && autoProcesses.Started.Count == 2, "toast open launcher cancels undispatched work");
+        await AutostartChecks.RunAsync(Check, output);
         var launcherVm = new LauncherViewModel(autoConfig, autoLaunch, fakeApps, new FakeBrowsers()); launcherVm.Reload();
         launcherVm.SelectedProfile = launcherVm.Profiles[1];
         Check(autoConfig.Current.ActiveProfileId == p1.Id, "launcher profile switch does not overwrite default profile");
@@ -262,8 +267,8 @@ internal static class Program
         window.Width = 1120; edit.ShowSettings = true; await Task.Delay(120); Render(window, "settings-light");
         edit.Settings.Mode = StartupMode.RunProfiles;
         edit.Settings.StartupProfiles[0].Selected = true;
-        edit.Settings.DelaySeconds = 3;
         await edit.FlushAsync();
+        await Task.Delay(120); Render(window, "settings-autostart-light");
         Check(startup.Last?.Mode == StartupMode.RunProfiles && config.Current.Settings.Startup.ProfileIds.Count == 1, "settings persist selected startup profiles");
         startup.Throw = true; edit.MarkDirty();
         Check(await edit.FlushAsync() && edit.SaveStatus.StartsWith("Đã lưu"), "startup registry failure does not report config as unsaved");
@@ -337,10 +342,10 @@ internal sealed class FakeBrowsers : IBrowserService
 }
 internal sealed class FakeProcess : IProcessLauncher
 {
-    public readonly List<ProcessStartInfo> Started = [];
+    public readonly System.Collections.Concurrent.ConcurrentQueue<ProcessStartInfo> Started = new();
     public bool ThrowUac;
     public string? Activated;
-    public void Start(ProcessStartInfo info) { if (ThrowUac) throw new Win32Exception(1223); Started.Add(info); }
+    public void Start(ProcessStartInfo info) { if (ThrowUac) throw new Win32Exception(1223); Started.Enqueue(info); }
     public Task ActivateAsync(string aumid, string args) { Activated = aumid; return Task.CompletedTask; }
 }
 internal sealed class FakeStartup : IStartupService

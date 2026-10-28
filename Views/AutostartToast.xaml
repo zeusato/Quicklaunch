@@ -3,6 +3,6 @@
   <StackPanel Orientation="Horizontal" Margin="0,0,0,10"><ui:SymbolIcon Symbol="Flash24" FontSize="16" Foreground="{DynamicResource Accent}" Margin="0,0,6,0"/><TextBlock Text="QUICKSTART" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource Accent}" Margin="0" VerticalAlignment="Center"/></StackPanel>
   <TextBlock Text="{Binding Title}" FontSize="20" FontWeight="SemiBold"/>
   <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" Margin="0,8" MaxHeight="40"/>
-  <DockPanel Margin="-3,4,0,0"><Button DockPanel.Dock="Right" Content="Mở Launcher" Command="{Binding OpenLauncherCommand}" Style="{StaticResource GhostButton}"/><Button Content="Mở ngay" Command="{Binding RunNowCommand}" Style="{StaticResource PrimaryButton}" MinHeight="36" MinWidth="96"/><Button Content="Hủy" Command="{Binding CancelCommand}" MinWidth="72" HorizontalAlignment="Left"/></DockPanel>
+  <DockPanel Margin="-3,4,0,0"><Button DockPanel.Dock="Right" Content="Mở Launcher" Command="{Binding OpenLauncherCommand}" Style="{StaticResource GhostButton}"/><Button Content="Đóng" Command="{Binding CancelCommand}" MinWidth="72" HorizontalAlignment="Left"/></DockPanel>
  </StackPanel></Grid>
 </ui:FluentWindow>

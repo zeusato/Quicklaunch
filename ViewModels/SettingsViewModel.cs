@@ -32,8 +32,6 @@ public sealed class SettingsViewModel : ObservableObject
     public bool StartupRun { get => Mode == StartupMode.RunProfiles; set { if (value) Mode = StartupMode.RunProfiles; } }
     public bool StartupShow { get => Mode == StartupMode.ShowLauncher; set { if (value) Mode = StartupMode.ShowLauncher; } }
     public StartupMode Mode { get => config.Current.Settings.Startup.Mode; set { config.Current.Settings.Startup.Mode = value; OnPropertyChanged(); OnPropertyChanged(nameof(StartupOff)); OnPropertyChanged(nameof(StartupRun)); OnPropertyChanged(nameof(StartupShow)); OnPropertyChanged(nameof(IsAutoRun)); RefreshPreview(); changed(); } }
-    public int DelaySeconds { get => config.Current.Settings.Startup.DelaySeconds; set { config.Current.Settings.Startup.DelaySeconds = Math.Clamp(value, 0, 120); OnPropertyChanged(); RefreshPreview(); changed(); } }
-    public int CountdownSeconds { get => config.Current.Settings.Startup.CountdownSeconds; set { config.Current.Settings.Startup.CountdownSeconds = Math.Clamp(value, 0, 15); OnPropertyChanged(); changed(); } }
     public int CloseDelayMs { get => config.Current.Settings.CloseDelayMs; set { config.Current.Settings.CloseDelayMs = Math.Clamp(value, 0, 60000); OnPropertyChanged(); changed(); } }
     public bool CloseWhenDone { get => config.Current.Settings.CloseWhenDone; set { config.Current.Settings.CloseWhenDone = value; OnPropertyChanged(); changed(); } }
     public bool KeepOpenOnError { get => config.Current.Settings.KeepOpenOnError; set { config.Current.Settings.KeepOpenOnError = value; OnPropertyChanged(); changed(); } }
@@ -47,11 +45,11 @@ public sealed class SettingsViewModel : ObservableObject
         get
         {
             if (Mode == StartupMode.Off) return "Không khởi động cùng Windows.";
-            if (Mode == StartupMode.ShowLauncher) return $"Sau khi đăng nhập {DelaySeconds}s sẽ mở Launcher.";
+            if (Mode == StartupMode.ShowLauncher) return "Mở Launcher ngay khi Windows khởi chạy QuickStart.";
             var profiles = config.Current.Settings.Startup.ProfileIds.Select(id => config.Current.Profiles.FirstOrDefault(p => p.Id == id)).OfType<Profile>().ToArray();
             var actions = profiles.SelectMany(p => p.Actions).ToArray();
             return profiles.Length == 0 ? "Chọn ít nhất một profile để tự chạy." :
-                $"Sau khi đăng nhập {DelaySeconds}s sẽ mở {actions.Count(a => a.Enabled && !a.SkipOnAutostart && a is not DelayAction)} mục từ {string.Join(", ", profiles.Select(p => p.Name))} ({actions.Count(a => !a.Enabled || a.SkipOnAutostart)} mục bị bỏ qua).";
+                $"Gửi ngay lệnh mở {actions.Count(a => a.Enabled && !a.SkipOnAutostart && a is not DelayAction)} mục từ {string.Join(", ", profiles.Select(p => p.Name))} ({actions.Count(a => !a.Enabled || a.SkipOnAutostart || a is DelayAction)} mục bị bỏ qua).";
         }
     }
     /// <summary>Set by the app; null in tests.</summary>

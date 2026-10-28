@@ -38,6 +38,31 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
         var actions = profile.Actions.Select(ConfigJson.Clone<LaunchAction>).ToArray();
         Log.Information("Starting profile {ProfileId} {Name}, {Count} actions, autostart={Autostart}", profile.Id, profile.Name, actions.Length, context.IsAutostart);
         foreach (var action in actions) yield return new(action.Id, RunState.Pending);
+        if (context.IsAutostart)
+        {
+            // Queue every launch before waiting for any result. Shell calls, UAC,
+            // missing network paths and app discovery must not hold up other apps.
+            var pending = new List<Task<RunResult>>();
+            foreach (var action in actions)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!action.Enabled || action.SkipOnAutostart || action is DelayAction)
+                {
+                    yield return new(action.Id, RunState.Skipped); continue;
+                }
+                pending.Add(Task.Run(() => RunSingleAsync(action, ct), ct));
+                yield return new(action.Id, RunState.Running);
+            }
+            Log.Information("Autostart queued {Count} launch requests for profile {ProfileId}; configured delays bypassed", pending.Count, profile.Id);
+            while (pending.Count > 0)
+            {
+                var completed = await Task.WhenAny(pending).WaitAsync(ct);
+                pending.Remove(completed);
+                var result = await completed;
+                yield return new(result.ActionId, result.State, result.Error);
+            }
+            yield break;
+        }
         foreach (var action in actions)
         {
             ct.ThrowIfCancellationRequested();
@@ -66,6 +91,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
     public async Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct)
     {
         if (!action.Enabled) return new(action.Id, RunState.Skipped);
+        var watch = Stopwatch.StartNew();
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -77,7 +103,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
                     if (web.BrowserId == "default") await StartProcessAsync(new(web.Url) { UseShellExecute = true }, ct);
                     else
                     {
-                        var browser = (await browsers.GetInstalledAsync()).FirstOrDefault(b => b.Id == web.BrowserId)
+                        var browser = await browsers.FindAsync(web.BrowserId).WaitAsync(ct)
                             ?? throw new FileNotFoundException("Không tìm thấy trình duyệt đã chọn.");
                         await StartAppAsync(new() { Target = new() { Path = browser.ExePath, Aumid = browser.Aumid },
                             Browser = new() { Urls = [web.Url], NewWindow = web.NewWindow } }, ct);
@@ -91,7 +117,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
                     await Task.Delay(delay.Ms, ct); break;
                 default: throw new NotSupportedException("Loại action không hỗ trợ.");
             }
-            Log.Information("Action {ActionId} {Name} completed", action.Id, action.Name);
+            Log.Information("Action {ActionId} {Name} completed in {Elapsed} ms (launch request returned)", action.Id, action.Name, watch.ElapsedMilliseconds);
             return new(action.Id, RunState.Done);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -103,11 +129,18 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
     private async Task StartAppAsync(AppAction action, CancellationToken ct)
     {
         var path = action.Target.Path;
+        var aumid = action.Target.Aumid;
+        var hasPath = File.Exists(path);
+        var id = BrowserCatalog.Identify(path, aumid);
         InstalledApp? installed = null;
-        if (!string.IsNullOrWhiteSpace(action.Target.Aumid) && (!File.Exists(path) || action.Browser is not null))
-            installed = (await apps.GetAppsAsync()).FirstOrDefault(a => a.Aumid == action.Target.Aumid);
-        if (!File.Exists(path) && File.Exists(installed?.ExePath)) path = installed!.ExePath;
-        var id = BrowserCatalog.Identify(path, action.Target.Aumid) ?? installed?.BrowserId;
+        // A known executable or Store AUMID is already a launch target; do not
+        // enumerate the entire AppsFolder just to open it at Windows logon.
+        if (!string.IsNullOrWhiteSpace(aumid) &&
+            ((!hasPath && !aumid.Contains('!')) ||
+             (action.Browser is not null && id is null)))
+            installed = (await apps.GetAppsAsync().WaitAsync(ct)).FirstOrDefault(a => a.Aumid == aumid);
+        if (!hasPath && File.Exists(installed?.ExePath)) { path = installed!.ExePath; hasPath = true; }
+        id = BrowserCatalog.Identify(path, aumid) ?? installed?.BrowserId;
         var args = action.Arguments ?? "";
         if (action.Browser is not null)
         {
@@ -115,19 +148,19 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
             args = (args + " " + BrowserArguments.Build(id, action.Browser)).Trim();
         }
         ct.ThrowIfCancellationRequested();
-        if (File.Exists(path))
+        if (hasPath)
         {
-            await StartProcessAsync(new(path) { Arguments = args, UseShellExecute = true,
+            await StartProcessAsync(new(path!) { Arguments = args, UseShellExecute = true,
                 WorkingDirectory = string.IsNullOrWhiteSpace(action.WorkingDir) ? Path.GetDirectoryName(path)! : action.WorkingDir,
                 Verb = action.RunAsAdmin ? "runas" : "" }, ct);
             return;
         }
-        var aumid = action.Target.Aumid;
         if (string.IsNullOrWhiteSpace(aumid)) throw new FileNotFoundException("Không tìm thấy ứng dụng: " + path);
         if (action.RunAsAdmin) throw new InvalidOperationException("Ứng dụng Store/AUMID không hỗ trợ chạy quản trị; chọn file .exe.");
         if (aumid.Contains('!'))
         {
-                        try { await process.ActivateAsync(aumid, args); return; }
+            Log.Information("Dispatching Store activation for action {ActionId}", action.Id);
+            try { await process.ActivateAsync(aumid, args); return; }
             catch (COMException ex) when (string.IsNullOrWhiteSpace(args))
             {
                 Log.Warning(ex, "Activation manager unavailable; trying AppsFolder for {Aumid}", aumid);
@@ -138,7 +171,9 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
     }
     private Task StartProcessAsync(ProcessStartInfo info, CancellationToken ct) => ShellInterop.OnSta(() =>
     {
-        ct.ThrowIfCancellationRequested(); process.Start(info); return true;
+        ct.ThrowIfCancellationRequested();
+        Log.Information("Dispatching process launch: {Target}", info.FileName);
+        process.Start(info); return true;
     });
     public static ProcessStartInfo BuildCommand(CommandAction c)
     {

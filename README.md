@@ -24,8 +24,10 @@ Không để lại file thừa; config, profile và mục khởi động cùng W
 - Browser editor: URL/tab, profile và cửa sổ mới.
 - Kéo tác vụ, hoặc ↑ ↓ để sắp xếp; nhân bản, chạy thử, xóa và hoàn tác.
 - Autosave sau 500 ms, Ctrl+S lưu ngay; lỗi lưu hiện ở thanh trạng thái.
-- Settings: Không / Tự chạy / Chỉ mở Launcher; profile tự chạy có thứ tự.
-- Toast có Mở ngay, Hủy, Mở Launcher; giữ lỗi để thử lại.
+- Settings: Không / Tự chạy / Chỉ mở Launcher; chọn một hoặc nhiều profile tự chạy.
+- Tự chạy gửi ngay lệnh mở đồng thời các ứng dụng trong mọi profile được chọn, không đếm ngược, không chờ ứng dụng trước và bỏ qua Delay/DelayAfter. Các mục tắt hoặc đánh dấu bỏ qua tự chạy vẫn được bỏ qua. Chạy thủ công giữ thứ tự và thời gian chờ đã cấu hình.
+- Toast hiển thị kết quả gửi lệnh, có Đóng và Mở Launcher; giữ lỗi để thử lại. Windows và từng ứng dụng quyết định thời điểm cửa sổ xuất hiện.
+- Giao diện mặc định là Tối; lựa chọn Sáng/Hệ thống đã lưu vẫn được giữ khi cập nhật.
 
 Phím Launcher: Enter chạy/hủy, Esc hủy/đóng, 1–9 chọn profile, Ctrl+, mở cấu hình. Picker: mũi tên, Space tick, Enter thêm, Esc hủy. Danh sách tác vụ: Delete, Alt+↑/↓; Ctrl+Z khi focus ngoài ô văn bản hoàn tác xóa tác vụ.
 
@@ -83,7 +85,7 @@ Harness WPF trả exit code khác 0 nếu lỗi. Test gồm fixture v2 thật, f
 
 Smoke Release dùng fixture portable chỉ chạy Delay, giữ/khôi phục Run value. Đóng QuickStart trước khi chạy script.
 
-Kiểm tra riêng tự khởi động (một yêu cầu và hai yêu cầu trùng trong thời gian chờ):
+Kiểm tra riêng tự khởi động (một yêu cầu và hai yêu cầu trùng khi phiên trước vẫn mở, cấu hình cũ có thời gian chờ tối đa nhưng lệnh phải được gửi ngay):
 
 ~~~powershell
 powershell -NoProfile -File scripts/Verify-Autostart.ps1 -ReleaseDirectory artifacts/publish

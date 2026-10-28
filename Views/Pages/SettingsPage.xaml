@@ -9,10 +9,7 @@
     <ListBox.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding Selected}"/></DataTemplate></ListBox.ItemTemplate>
    </ListBox>
    <WrapPanel><Button Content="↑" Click="MoveStartupUp" AutomationProperties.Name="Profile tự chạy lên"/><Button Content="↓" Click="MoveStartupDown" AutomationProperties.Name="Profile tự chạy xuống"/></WrapPanel>
-   <Grid MaxWidth="520" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="250"/><ColumnDefinition Width="250"/></Grid.ColumnDefinitions>
-    <StackPanel Margin="0,0,12,0"><TextBlock Text="Trễ sau đăng nhập (0–120s)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Trễ sau đăng nhập giây"/></StackPanel>
-    <StackPanel Grid.Column="1"><TextBlock Text="Đếm ngược (0–15s)" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding CountdownSeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" AutomationProperties.Name="Đếm ngược giây"/></StackPanel>
-   </Grid>
+   <TextBlock Text="Mở đồng thời ngay khi QuickStart khởi động. Bỏ qua đếm ngược và thời gian chờ trong profile khi tự chạy." Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8"/>
    </StackPanel><TextBlock Text="{Binding Preview}" Foreground="{DynamicResource Accent}" Margin="0,4"/>
    <TextBlock Text="{Binding StartupWarning}" Foreground="{DynamicResource State.Warning}" Visibility="{Binding StartupWarning, Converter={StaticResource EmptyVisibility}, ConverterParameter=Invert}"/><TextBlock Text="{Binding UacWarning}" Foreground="{DynamicResource State.Warning}" Visibility="{Binding UacWarning, Converter={StaticResource EmptyVisibility}, ConverterParameter=Invert}"/>
   </StackPanel></Border>

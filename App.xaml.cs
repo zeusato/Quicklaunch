@@ -23,7 +23,6 @@ public partial class App : Application
     private LauncherWindow? launcher;
     private ConfigWindow? configWindow;
     private AutostartToast? toast;
-    private readonly CancellationTokenSource startupDelay = new();
     public ThemeService Themes => services!.GetRequiredService<ThemeService>();
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -84,7 +83,8 @@ public partial class App : Application
                 catch (Exception ex) { Log.Warning(ex, "Startup registration unavailable"); }
             wait = ThreadPool.RegisterWaitForSingleObject(activation, (_, _) => Dispatcher.BeginInvoke(() => OnActivated(TakeForwardedArgs(paths))), null, Timeout.Infinite, false);
             var args = e.Args;
-            _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => _ = ResolveAppTargetsAsync()));
+            if (!args.Contains("--autostart"))
+                _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => _ = ResolveAppTargetsAsync()));
             #if DEBUG
             if (args.Contains("--design"))
             {
@@ -95,10 +95,10 @@ public partial class App : Application
             else if (args.Contains("--autostart"))
             {
                 if (config.Current.Settings.Startup.Mode == StartupMode.Off) { Shutdown(); return; }
-                try { await Task.Delay(config.Current.Settings.Startup.DelaySeconds * 1000, startupDelay.Token); }
-                catch (OperationCanceledException) { Log.Information("Autostart delay cancelled before profiles ran"); return; }
+                Log.Information("Autostart dispatch beginning {Elapsed} ms after process start; legacy startup delays bypassed",
+                    (DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalMilliseconds);
                 if (config.Current.Settings.Startup.Mode == StartupMode.ShowLauncher) ShowLauncher();
-                else ShowToast();
+                else await ShowToastAsync();
             }
             else
             {
@@ -119,7 +119,7 @@ public partial class App : Application
         try
         {
             // Windows may invoke multiple startup entries. A duplicate automatic
-            // activation must not cancel the first instance's logon delay.
+            // activation must not interrupt or repeat the first instance's run.
             if (args.Contains("--autostart") && !args.Contains("--config"))
             {
                 Log.Information("Duplicate autostart activation ignored; existing instance retains control");
@@ -127,7 +127,6 @@ public partial class App : Application
             }
             // An autostart run in progress keeps going; a second launch only brings its toast forward.
             if (toast is not null) { toast.Activate(); return; }
-            startupDelay.Cancel();
             if (args.Contains("--config")) { ShowConfig(); return; }
             if (configWindow is { IsVisible: true }) { configWindow.WindowState = WindowState.Normal; configWindow.Activate(); return; }
             ShowLauncher();
@@ -208,12 +207,18 @@ public partial class App : Application
         launcher?.Hide(); MainWindow = configWindow; configWindow.Show(); configWindow.Activate();
         if (picker) configWindow.ShowPicker();
     }
-    private void ShowToast()
+    private async Task ShowToastAsync()
     {
         var vm = services!.GetRequiredService<AutostartToastViewModel>();
-        toast = new(vm); Themes.Attach(toast); MainWindow = toast;
-        vm.Finished += open => { toast?.Close(); toast = null; if (open) { ShowLauncher(); launcher!.ViewModel.ApplyResults(vm.Results); } else Shutdown(); };
-        toast.Show();
+        var finished = false;
+        vm.Finished += open => { finished = true; toast?.Close(); toast = null; if (open) { ShowLauncher(); launcher!.ViewModel.ApplyResults(vm.Results); } else Shutdown(); };
+        // Send requests before constructing/rendering the notification window.
+        var run = vm.StartAsync();
+        if (!finished)
+        {
+            toast = new(vm); Themes.Attach(toast); MainWindow = toast; toast.Show();
+        }
+        await run;
     }
     private async Task ResolveAppTargetsAsync()
     {
@@ -236,7 +241,7 @@ public partial class App : Application
     }
     protected override void OnExit(ExitEventArgs e)
     {
-        startupDelay.Cancel(); wait?.Unregister(null); activation?.Dispose();
+        wait?.Unregister(null); activation?.Dispose();
         if (ownsMutex) instance?.ReleaseMutex(); instance?.Dispose();
         Log.Information("QuickStart exiting with code {Code}", e.ApplicationExitCode); services?.Dispose(); Log.CloseAndFlush(); base.OnExit(e);
     }

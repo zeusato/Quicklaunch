@@ -8,7 +8,7 @@ using Wpf.Ui.Controls;
 namespace QuickStartLauncher.Services;
 public sealed class ThemeService : IDisposable
 {
-    public ThemeMode Mode { get; private set; }
+    public ThemeMode Mode { get; private set; } = ThemeMode.Dark;
     private readonly List<FluentWindow> windows = [];
     private readonly HashSet<FluentWindow> watched = [];
     public ThemeService() => SystemEvents.UserPreferenceChanged += SystemChanged;

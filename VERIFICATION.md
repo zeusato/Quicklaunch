@@ -1,5 +1,15 @@
 # Verification — QuickStartLauncher v3
 
+## v3.0.2 — tự chạy tức thời, giao diện tối mặc định (28/10/2026)
+
+- Tự chạy gửi các lệnh mở độc lập, đồng thời giữa các tác vụ và profile; không đợi toast render, đếm ngược, delay đăng nhập, DelayAction hoặc DelayAfter. Chạy thủ công vẫn giữ thứ tự và delay. Các mục disabled/skipOnAutostart vẫn bỏ qua.
+- Không quét AppsFolder để mở exe trình duyệt đã xác định hoặc Store AUMID; website ưu tiên tìm trình duyệt trong App Paths. Không làm enrichment danh sách ứng dụng trong luồng tự chạy.
+- Config mới mặc định Dark; theme đã lưu được giữ. Các trường delay cũ vẫn đọc được nhưng không áp dụng cho tự chạy.
+- Harness: **90 passed, 0 failed**, gồm giữ một lệnh mở bị kẹt và xác nhận các lệnh cùng/khác profile vẫn được gửi, lỗi độc lập, hủy và không chạy trùng.
+- Exe Release self-contained build thành công. Smoke tự chạy: **2/2 đạt** với cấu hình cũ delay=120s, countdown=15s và các delay tác vụ 60s. Hai yêu cầu mở thực được gửi cùng timestamp; khoảng **17–21 ms từ lúc bắt đầu profile**, **1.854–2.392 giây từ lúc tạo process** trên máy thử. Evidence: `artifacts/autostart-20261028-154502-267/results.json` và log cạnh file.
+- Smoke Release thủ công: **6/6 đạt**, evidence `artifacts/smoke-20261028-154524/`. UI render phần tự chạy và kiểm tra binding đạt.
+- Thời gian từ đăng nhập Windows đến lúc Windows tạo process, hoặc từ lệnh mở đến lúc ứng dụng đích hiện cửa sổ, không nằm trong phép đo gửi lệnh. Chưa có log hay kiểm thử reboot trên máy khách báo chậm 5–6 phút.
+
 ## Kiểm tra bổ sung 28/10/2026 — tự khởi động
 
 - Tái hiện trên bản `artifacts/publish`: một lần `--autostart` chạy thành công; lần thứ hai trong thời gian chờ làm hủy delay, chỉ mở Launcher và không chạy profile. Evidence: `artifacts/autostart-20261028-140653-471/results.json`.

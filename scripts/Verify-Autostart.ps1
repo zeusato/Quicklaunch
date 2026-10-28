@@ -20,17 +20,23 @@ try {
         $profileId = [Guid]::NewGuid().ToString()
         $config = @{
             version = 3; activeProfileId = $profileId
-            settings = @{ theme = 'dark'; startup = @{ mode = 'runProfiles'; profileIds = @($profileId); delaySeconds = 6; countdownSeconds = 1 }; closeWhenDone = $true; closeDelayMs = 100; keepOpenOnError = $true }
-            profiles = @(@{ id = $profileId; name = 'Autostart test'; icon = ''; actions = @(@{ kind = 'delay'; id = [Guid]::NewGuid().ToString(); name = 'Safe delay'; enabled = $true; skipOnAutostart = $false; delayAfterMs = 0; ms = 100 }) })
+            settings = @{ theme = 'dark'; startup = @{ mode = 'runProfiles'; profileIds = @($profileId); delaySeconds = 120; countdownSeconds = 15 }; closeWhenDone = $true; closeDelayMs = 3000; keepOpenOnError = $true }
+            profiles = @(@{ id = $profileId; name = 'Autostart test'; icon = ''; actions = @(
+                @{ kind = 'delay'; id = [Guid]::NewGuid().ToString(); name = 'Legacy wait'; enabled = $true; skipOnAutostart = $false; delayAfterMs = 60000; ms = 60000 },
+                @{ kind = 'command'; id = [Guid]::NewGuid().ToString(); name = 'Safe command A'; enabled = $true; skipOnAutostart = $false; delayAfterMs = 60000; command = 'exit 0'; shell = 'cmd'; hidden = $true; runAsAdmin = $false },
+                @{ kind = 'command'; id = [Guid]::NewGuid().ToString(); name = 'Safe command B'; enabled = $true; skipOnAutostart = $false; delayAfterMs = 60000; command = 'exit 0'; shell = 'cmd'; hidden = $true; runAsAdmin = $false }
+            ) })
         }
         $config | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $caseRoot 'config\config.json') -Encoding utf8
         $first = $null; $second = $null
         try {
             $exe = Join-Path $caseRoot 'QuickStartLauncher.exe'
+            $watch = [Diagnostics.Stopwatch]::StartNew()
             $first = Start-Process -FilePath $exe -ArgumentList '--autostart' -WindowStyle Hidden -PassThru
+            $processStartedAt = $first.StartTime.ToUniversalTime()
             if ($duplicate) {
                 # Wait for the first process to register the portable executable, then
-                # allow the activation listener to start, while still inside its delay.
+                # allow the activation listener to start, while results remain visible.
                 $deadline = (Get-Date).AddSeconds(10)
                 while ($runKey.GetValue('QuickStartLauncher') -ne ('"' + $exe + '" --autostart')) {
                     if ($first.HasExited -or (Get-Date) -gt $deadline) { throw 'First startup did not register.' }
@@ -43,9 +49,18 @@ try {
             $exited = $first.WaitForExit(15000)
             $log = (Get-ChildItem -LiteralPath (Join-Path $caseRoot 'logs') -File | Get-Content) -join "`n"
             $runs = ([regex]::Matches($log, 'Starting profile .*autostart=true')).Count
-            $done = ([regex]::Matches($log, 'Delay .* completed after')).Count
-            $ok = $exited -and $first.ExitCode -eq 0 -and $runs -eq 1 -and $done -eq 1
-            $results += [pscustomobject]@{ Case = $caseName; Passed = $ok; Exited = $exited; AutostartRuns = $runs; CompletedActions = $done }
+            $done = ([regex]::Matches($log, 'Action .* completed in')).Count
+            $dispatches = ([regex]::Matches($log, 'Dispatching process launch: cmd.exe')).Count
+            $dispatchLines = @($log -split "`n" | Where-Object { $_ -match 'Dispatching process launch: cmd.exe' })
+            $dispatchMs = if ($dispatchLines.Count -eq 2) {
+                $lastDispatch = [DateTimeOffset]::ParseExact($dispatchLines[-1].Substring(0, 30), 'yyyy-MM-dd HH:mm:ss.fff zzz', [Globalization.CultureInfo]::InvariantCulture)
+                ($lastDispatch.UtcDateTime - $processStartedAt).TotalMilliseconds
+            } else { [double]::PositiveInfinity }
+            $elapsed = $watch.ElapsedMilliseconds
+            # Measure process start -> requests, excluding PowerShell/ShellExecute
+            # overhead before process creation and the result display afterwards.
+            $ok = $exited -and $first.ExitCode -eq 0 -and $runs -eq 1 -and $done -eq 2 -and $dispatches -eq 2 -and $dispatchMs -lt 5000
+            $results += [pscustomobject]@{ Case = $caseName; Passed = $ok; Exited = $exited; AutostartRuns = $runs; CompletedActions = $done; Dispatches = $dispatches; DispatchMs = [math]::Round($dispatchMs); TotalMs = $elapsed }
         }
         finally {
             foreach ($owned in @($first, $second)) {

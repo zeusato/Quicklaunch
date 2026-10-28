@@ -7,7 +7,7 @@ public partial class AutostartToast : FluentWindow
     public AutostartToast(AutostartToastViewModel vm)
     {
         InitializeComponent(); DataContext = vm;
-        Loaded += async (_, _) => { var area = SystemParameters.WorkArea; Left = area.Right - Width - 20; Top = area.Bottom - Height - 20; await vm.StartAsync(); };
+        Loaded += (_, _) => { var area = SystemParameters.WorkArea; Left = area.Right - Width - 20; Top = area.Bottom - Height - 20; };
         Closed += (_, _) => vm.Stop();
     }
 }

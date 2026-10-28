@@ -5,12 +5,28 @@ namespace QuickStartLauncher.Services.Browsers;
 public interface IBrowserService
 {
     Task<IReadOnlyList<BrowserInfo>> GetInstalledAsync();
+    async Task<BrowserInfo?> FindAsync(string id) => (await GetInstalledAsync()).FirstOrDefault(b => b.Id == id);
     IReadOnlyList<BrowserProfile> GetProfiles(string browserId);
     string? DefaultBrowserId { get; }
 }
 public sealed class BrowserCatalog(IInstalledAppsService apps) : IBrowserService
 {
     public static readonly string[] Ids = ["chrome", "edge", "brave", "coccoc", "opera", "firefox"];
+    public async Task<BrowserInfo?> FindAsync(string id)
+    {
+        // Launching one URL should not wait for a full shell inventory when
+        // Windows already has the browser executable registered.
+        var exe = id switch { "chrome" => "chrome.exe", "edge" => "msedge.exe", "brave" => "brave.exe",
+            "firefox" => "firefox.exe", "opera" => "opera.exe", "coccoc" => "browser.exe", _ => null };
+        if (exe is not null)
+            foreach (var hive in new[] { Registry.CurrentUser, Registry.LocalMachine })
+            {
+                using var key = hive.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths\" + exe);
+                var path = (key?.GetValue("") as string)?.Trim('"');
+                if (File.Exists(path) && Identify(path, null) == id) return new(id, id, path);
+            }
+        return (await GetInstalledAsync()).FirstOrDefault(b => b.Id == id);
+    }
     public static string? Identify(string? path, string? aumid)
     {
         if (aumid?.Contains("._crx_", StringComparison.OrdinalIgnoreCase) == true) return null;
