@@ -83,6 +83,14 @@ Harness WPF trả exit code khác 0 nếu lỗi. Test gồm fixture v2 thật, f
 
 Smoke Release dùng fixture portable chỉ chạy Delay, giữ/khôi phục Run value. Đóng QuickStart trước khi chạy script.
 
+Kiểm tra riêng tự khởi động (một yêu cầu và hai yêu cầu trùng trong thời gian chờ):
+
+~~~powershell
+powershell -NoProfile -File scripts/Verify-Autostart.ps1 -ReleaseDirectory artifacts/publish
+~~~
+
+Nếu lỗi chỉ xuất hiện trên máy khác, chép `scripts/Diagnose-Startup.ps1` và `scripts/Diagnose-Startup.cmd` cạnh exe đang dùng, rồi mở file `.cmd`. Báo cáo `QuickStart-startup-report.txt` ghi đăng ký Run/StartupApproved, shortcut Startup, đường dẫn exe, cấu hình tự chạy và ba log gần nhất. Công cụ không đổi cài đặt và không mở các ứng dụng trong profile. Có thể truyền `-ExecutablePath` khi chạy script PowerShell để chỉ định bản exe cần kiểm tra.
+
 Xem **VERIFICATION.md** cho kết quả và phần cần kiểm tra trực tiếp; **spec.md** cho schema và kiến trúc.
 
 ## Package đã pin

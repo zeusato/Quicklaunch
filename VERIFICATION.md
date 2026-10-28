@@ -1,5 +1,13 @@
 # Verification — QuickStartLauncher v3
 
+## Kiểm tra bổ sung 28/10/2026 — tự khởi động
+
+- Tái hiện trên bản `artifacts/publish`: một lần `--autostart` chạy thành công; lần thứ hai trong thời gian chờ làm hủy delay, chỉ mở Launcher và không chạy profile. Evidence: `artifacts/autostart-20261028-140653-471/results.json`.
+- Sửa `App.OnActivated` để bỏ qua yêu cầu `--autostart` trùng, giữ nguyên luồng đầu tiên; thêm log đường dẫn exe/config, chế độ startup và hủy delay.
+- Build self-contained tại `artifacts/autostart-fix` thành công. Hai tình huống trên đều chạy đúng một profile, hoàn thành action Delay và thoát mã 0: `artifacts/autostart-20261028-140951-205/results.json`.
+- Harness hiện tại: **79 passed, 0 failed**. Script chẩn đoán đã chạy thử trên máy phát triển.
+- Ảnh báo lỗi thuộc máy khác; chưa có log/registry từ máy đó, nên chưa xác nhận lỗi yêu cầu trùng là nguyên nhân thực tế. Chưa thử đăng nhập/reboot trên máy đó.
+
 Ngày 21/10/2026, Asia/Saigon. Máy thử: Windows 11 build 26200, x64; .NET SDK 9.0.303, Desktop Runtime 8.0.19.
 
 ## Trạng thái

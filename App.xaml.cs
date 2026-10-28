@@ -53,6 +53,8 @@ public partial class App : Application
             Directory.CreateDirectory(paths.LogDirectory);
             Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
                 .WriteTo.File(Path.Combine(paths.LogDirectory, ".log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14, shared: true).CreateLogger();
+            Log.Information("QuickStart starting: executable={Executable}, config={ConfigFile}, autostart={Autostart}",
+                Environment.ProcessPath, paths.ConfigFile, e.Args.Contains("--autostart"));
             TakeForwardedArgs(paths); // drop leftovers from a second launch that raced a previous shutdown
             if (updated) UpdateService.CleanupAfterUpdate(WaitPid()); // step 3: drop exe.new + stale extractions
             else _ = Task.Run(UpdateService.CleanOldExtractions); // also covers manual upgrades from a zip
@@ -73,6 +75,9 @@ public partial class App : Application
             services = collection.BuildServiceProvider();
             services.GetRequiredService<UpdateViewModel>().RestartRequested += exe => _ = RestartAfterUpdateAsync(exe);
             var config = services.GetRequiredService<IConfigService>(); config.Load();
+            Log.Information("Startup settings: mode={Mode}, selectedProfiles={ProfileCount}, delay={DelaySeconds}s, countdown={CountdownSeconds}s, readOnly={ReadOnly}",
+                config.Current.Settings.Startup.Mode, config.Current.Settings.Startup.ProfileIds.Count,
+                config.Current.Settings.Startup.DelaySeconds, config.Current.Settings.Startup.CountdownSeconds, config.IsReadOnly);
             Themes.Apply(config.Current.Settings.Theme);
             if (!config.IsReadOnly)
                 try { services.GetRequiredService<IStartupService>().Apply(config.Current.Settings.Startup); }
@@ -91,7 +96,7 @@ public partial class App : Application
             {
                 if (config.Current.Settings.Startup.Mode == StartupMode.Off) { Shutdown(); return; }
                 try { await Task.Delay(config.Current.Settings.Startup.DelaySeconds * 1000, startupDelay.Token); }
-                catch (OperationCanceledException) { return; }
+                catch (OperationCanceledException) { Log.Information("Autostart delay cancelled before profiles ran"); return; }
                 if (config.Current.Settings.Startup.Mode == StartupMode.ShowLauncher) ShowLauncher();
                 else ShowToast();
             }
@@ -113,6 +118,13 @@ public partial class App : Application
     {
         try
         {
+            // Windows may invoke multiple startup entries. A duplicate automatic
+            // activation must not cancel the first instance's logon delay.
+            if (args.Contains("--autostart") && !args.Contains("--config"))
+            {
+                Log.Information("Duplicate autostart activation ignored; existing instance retains control");
+                return;
+            }
             // An autostart run in progress keeps going; a second launch only brings its toast forward.
             if (toast is not null) { toast.Activate(); return; }
             startupDelay.Cancel();
