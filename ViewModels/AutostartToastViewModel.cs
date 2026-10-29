@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using QuickStartLauncher.Models;
 using QuickStartLauncher.Services.Config;
 using QuickStartLauncher.Services.Launch;
+using Serilog;
 namespace QuickStartLauncher.ViewModels;
 public sealed partial class AutostartToastViewModel(IConfigService config, ILaunchService launch) : ObservableObject
 {
@@ -11,50 +12,111 @@ public sealed partial class AutostartToastViewModel(IConfigService config, ILaun
     [ObservableProperty] private bool isRunning;
     [ObservableProperty] private bool hasErrors;
     public event Action<bool>? Finished;
+    public event Action<bool>? VisibilityRequested;
+    public event Action? OpenLauncherRequested;
     public Dictionary<Guid, RunProgress> Results { get; } = [];
     private readonly CancellationTokenSource cancellation = new();
-    private bool started;
-    [RelayCommand] private void Cancel() { cancellation.Cancel(); Finished?.Invoke(false); }
-    [RelayCommand] private void OpenLauncher() { cancellation.Cancel(); Finished?.Invoke(true); }
+    private readonly HashSet<(Guid Profile, Guid Action)> dispatched = [];
+    private readonly List<string> failures = [];
+    private CancellationTokenSource? hideDelay;
+    private Task hideTask = Task.CompletedTask;
+    private bool started, finished, summaryShown, dismissed;
+    private int count;
+
+    [RelayCommand] private void Dismiss()
+    {
+        dismissed = true; hideDelay?.Cancel(); VisibilityRequested?.Invoke(false);
+        // Closing a notification must never cancel an in-flight launch.
+        if (started && !IsRunning) Finish(false);
+    }
+    [RelayCommand] private void OpenLauncher()
+    {
+        OpenLauncherRequested?.Invoke();
+        Dismiss();
+    }
+    private void Finish(bool open)
+    {
+        if (finished) return;
+        finished = true; Finished?.Invoke(open);
+    }
+    private void ReportDispatched(Guid profile, Guid action)
+    {
+        if (finished || cancellation.IsCancellationRequested || !dispatched.Add((profile, action))) return;
+        if (dispatched.Count == count && !HasErrors && !summaryShown)
+        {
+            summaryShown = true;
+            Title = $"Đã gửi {count} lệnh mở ứng dụng";
+            Detail = "Các ứng dụng đang tự khởi động.";
+            Log.Information("Autostart dispatched all {Count} requests; notification will hide while monitoring continues", count);
+            if (!dismissed) hideTask = HideAfterDelayAsync();
+        }
+    }
+    private async Task HideAfterDelayAsync()
+    {
+        hideDelay?.Cancel();
+        using var delay = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+        hideDelay = delay;
+        try
+        {
+            await Task.Delay(config.Current.Settings.CloseDelayMs, delay.Token);
+            VisibilityRequested?.Invoke(false);
+            Log.Information("Autostart notification hidden; monitoring={Monitoring}", IsRunning);
+        }
+        catch (OperationCanceledException) { }
+        finally { if (ReferenceEquals(hideDelay, delay)) hideDelay = null; }
+    }
     public async Task StartAsync()
     {
         if (started) return;
         started = true;
         var profiles = config.Current.Settings.Startup.ProfileIds.Select(id => config.Current.Profiles.FirstOrDefault(p => p.Id == id)).OfType<Profile>().ToArray();
-        var count = profiles.SelectMany(p => p.Actions).Count(a => a.Enabled && !a.SkipOnAutostart && a is not DelayAction);
+        count = profiles.SelectMany(p => p.Actions).Count(a => a.Enabled && !a.SkipOnAutostart && a is not DelayAction);
         Detail = string.Join(" · ", profiles.Select(p => p.Name));
         try
         {
             cancellation.Token.ThrowIfCancellationRequested();
             if (profiles.Length == 0)
             {
-                // Nothing to run: explain briefly, then hand over to the Launcher instead of leaving the toast stuck.
-                Title = "Chưa chọn profile tự chạy"; Detail = "Đang mở Launcher để bạn chọn…"; HasErrors = true;
+                Title = "Chưa chọn profile tự chạy"; Detail = "Đang mở Launcher để chọn profile…"; HasErrors = true;
                 await Task.Delay(Math.Max(config.Current.Settings.CloseDelayMs, 2500), cancellation.Token);
-                Finished?.Invoke(true); return;
+                Finish(true); return;
             }
             IsRunning = true;
-            Title = $"Đang gửi lệnh mở {count} mục…";
-            var errors = 0;
+            Title = $"Đang gửi {count} lệnh mở ứng dụng…";
             async Task RunProfileAsync(Profile profile)
             {
-                await foreach (var progress in launch.RunAsync(profile, new(true), cancellation.Token))
+                // Progress captures the UI context; native calls report dispatch
+                // from worker threads before waiting for Windows to return.
+                var sent = new Progress<Guid>(id => ReportDispatched(profile.Id, id));
+                await foreach (var progress in launch.RunAsync(profile, new(true, sent), cancellation.Token))
                 {
-                    Title = $"Đang mở · {profile.Name}";
-                    var action = profile.Actions.FirstOrDefault(a => a.Id == progress.ActionId);
                     Results[progress.ActionId] = progress;
-                    Detail = $"{action?.Name} · {progress.State switch { RunState.Done => "Đã gửi lệnh", RunState.Failed => "Lỗi", RunState.Skipped => "Bỏ qua", _ => "Đang mở" }}";
-                    if (progress.State == RunState.Failed) errors++;
+                    if (progress.State != RunState.Failed) continue;
+                    var name = profile.Actions.FirstOrDefault(a => a.Id == progress.ActionId)?.Name ?? profile.Name;
+                    failures.Add(name); HasErrors = true; dismissed = false;
+                    hideDelay?.Cancel();
+                    Title = $"Có {failures.Count} lệnh mở bị lỗi";
+                    Detail = string.Join(", ", failures) + ". Mở Launcher để xem và thử lại.";
+                    VisibilityRequested?.Invoke(true);
+                    Log.Warning("Autostart error notification shown for {Name}", name);
+                    if (!config.Current.Settings.KeepOpenOnError) hideTask = HideAfterDelayAsync();
                 }
             }
             await Task.WhenAll(profiles.Select(RunProfileAsync));
-            IsRunning = false; HasErrors = errors > 0;
-            Title = errors == 0 ? "Hoàn tất ✓" : $"Có {errors} mục lỗi";
-            Detail = errors == 0 ? "Đã gửi các lệnh mở ứng dụng." : "Mở Launcher để xem và chạy lại.";
-            if (errors == 0 || !config.Current.Settings.KeepOpenOnError)
-            { await Task.Delay(config.Current.Settings.CloseDelayMs, cancellation.Token); Finished?.Invoke(false); }
+            IsRunning = false;
+            if (HasErrors && config.Current.Settings.KeepOpenOnError && !dismissed) return;
+            if (!HasErrors && !summaryShown)
+            {
+                // Empty/all-skipped profiles and completion racing posted progress.
+                summaryShown = true;
+                Title = count == 0 ? "Không có ứng dụng cần tự mở" : "Đã xử lý các lệnh mở ứng dụng";
+                Detail = "";
+                if (!dismissed) hideTask = HideAfterDelayAsync();
+            }
+            await hideTask;
+            Finish(false);
         }
         catch (OperationCanceledException) { }
     }
-    public void Stop() => cancellation.Cancel();
+    public void Stop() { cancellation.Cancel(); hideDelay?.Cancel(); }
 }

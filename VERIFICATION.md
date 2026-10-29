@@ -1,5 +1,13 @@
 # Verification — QuickStartLauncher v3
 
+## v3.0.3 — ẩn thông báo, theo dõi nền (29/10/2026)
+
+- Báo đã gửi N lệnh tại thời điểm gọi Windows mở ứng dụng, không chờ lời gọi trả về. Sau thời gian giữ kết quả, toast ẩn và tiến trình tiếp tục theo dõi nền; lỗi đến muộn hiện lại thông báo. Không thay đổi cơ chế mở đồng thời của v3.0.2.
+- Dismiss/đóng cửa sổ/Mở Launcher không hủy công việc. Chỉ kết thúc tiến trình sau khi theo dõi xong và không còn cửa sổ làm việc; giữ lỗi theo cài đặt KeepOpenOnError.
+- Harness: **99 passed, 0 failed**. Kiểm thử WPF thật giữ lời gọi mở chưa trả về, kiểm tra cửa sổ đã ẩn; success không hiện lại, late failure hiện lại, Alt+F4 đóng được, chờ tìm target không báo nhầm đã gửi. Hình kiểm tra: `artifacts/tests/autostart-dispatched.png`, `autostart-late-error.png`.
+- Build Release self-contained thành công. Tự chạy **2/2 đạt**, evidence `artifacts/autostart-20261029-093445-176/`; smoke Release **6/6 đạt**, evidence `artifacts/smoke-20261029-093501/`.
+- Báo cáo máy khách đã xác nhận v3.0.2 gửi năm lệnh trong 37 ms; thời gian trả về của SHA PC 108 giây và Outlook 27 giây. Chưa xác định nguyên nhân sâu hơn của độ trễ đó; v3.0.3 thay cách thông báo và theo dõi, không tuyên bố làm ứng dụng đích khởi động nhanh hơn.
+
 ## v3.0.2 — tự chạy tức thời, giao diện tối mặc định (28/10/2026)
 
 - Tự chạy gửi các lệnh mở độc lập, đồng thời giữa các tác vụ và profile; không đợi toast render, đếm ngược, delay đăng nhập, DelayAction hoặc DelayAfter. Chạy thủ công vẫn giữ thứ tự và delay. Các mục disabled/skipOnAutostart vẫn bỏ qua.

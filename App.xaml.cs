@@ -23,6 +23,7 @@ public partial class App : Application
     private LauncherWindow? launcher;
     private ConfigWindow? configWindow;
     private AutostartToast? toast;
+    private AutostartToastViewModel? autostart;
     public ThemeService Themes => services!.GetRequiredService<ThemeService>();
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -126,7 +127,7 @@ public partial class App : Application
                 return;
             }
             // An autostart run in progress keeps going; a second launch only brings its toast forward.
-            if (toast is not null) { toast.Activate(); return; }
+            if (toast is { IsVisible: true }) { toast.Activate(); return; }
             if (args.Contains("--config")) { ShowConfig(); return; }
             if (configWindow is { IsVisible: true }) { configWindow.WindowState = WindowState.Normal; configWindow.Activate(); return; }
             ShowLauncher();
@@ -186,7 +187,7 @@ public partial class App : Application
             {
                 launcher = null;
                 try { var c = services!.GetRequiredService<IConfigService>(); if (!c.IsReadOnly) await c.SaveAsync(); } catch (Exception e) { Log.Error(e, "Final save failed"); }
-                if (configWindow is null) Shutdown();
+                if (configWindow is null && autostart is null) Shutdown();
             };
         }
         MainWindow = launcher; launcher.Show(); launcher.WindowState = WindowState.Normal; launcher.Activate();
@@ -201,7 +202,8 @@ public partial class App : Application
             configWindow.Closed += (_, _) =>
             {
                 configWindow = null;
-                if (launcher is not null) { launcher.ViewModel.Reload(); ShowLauncher(); } else Shutdown();
+                if (launcher is not null) { launcher.ViewModel.Reload(); ShowLauncher(); }
+                else if (autostart is null) Shutdown();
             };
         }
         launcher?.Hide(); MainWindow = configWindow; configWindow.Show(); configWindow.Activate();
@@ -210,14 +212,30 @@ public partial class App : Application
     private async Task ShowToastAsync()
     {
         var vm = services!.GetRequiredService<AutostartToastViewModel>();
+        autostart = vm;
         var finished = false;
-        vm.Finished += open => { finished = true; toast?.Close(); toast = null; if (open) { ShowLauncher(); launcher!.ViewModel.ApplyResults(vm.Results); } else Shutdown(); };
+        var visible = true;
+        void ShowNotification()
+        {
+            if (toast is null) { toast = new(vm); Themes.Attach(toast); MainWindow = toast; }
+            toast.Show();
+        }
+        vm.VisibilityRequested += show =>
+        {
+            visible = show;
+            if (show && !finished) ShowNotification(); else toast?.Hide();
+        };
+        vm.OpenLauncherRequested += () => { ShowLauncher(); launcher!.ViewModel.ApplyResults(vm.Results); };
+        vm.Finished += open =>
+        {
+            finished = true; autostart = null; toast?.CloseAfterMonitoring(); toast = null;
+            if (open) ShowLauncher();
+            launcher?.ViewModel.ApplyResults(vm.Results);
+            if (launcher is null && configWindow is null) Shutdown();
+        };
         // Send requests before constructing/rendering the notification window.
         var run = vm.StartAsync();
-        if (!finished)
-        {
-            toast = new(vm); Themes.Attach(toast); MainWindow = toast; toast.Show();
-        }
+        if (!finished && visible) ShowNotification();
         await run;
     }
     private async Task ResolveAppTargetsAsync()
@@ -241,6 +259,7 @@ public partial class App : Application
     }
     protected override void OnExit(ExitEventArgs e)
     {
+        autostart?.Stop();
         wait?.Unregister(null); activation?.Dispose();
         if (ownsMutex) instance?.ReleaseMutex(); instance?.Dispose();
         Log.Information("QuickStart exiting with code {Code}", e.ApplicationExitCode); services?.Dispose(); Log.CloseAndFlush(); base.OnExit(e);

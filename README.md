@@ -26,7 +26,8 @@ Không để lại file thừa; config, profile và mục khởi động cùng W
 - Autosave sau 500 ms, Ctrl+S lưu ngay; lỗi lưu hiện ở thanh trạng thái.
 - Settings: Không / Tự chạy / Chỉ mở Launcher; chọn một hoặc nhiều profile tự chạy.
 - Tự chạy gửi ngay lệnh mở đồng thời các ứng dụng trong mọi profile được chọn, không đếm ngược, không chờ ứng dụng trước và bỏ qua Delay/DelayAfter. Các mục tắt hoặc đánh dấu bỏ qua tự chạy vẫn được bỏ qua. Chạy thủ công giữ thứ tự và thời gian chờ đã cấu hình.
-- Toast hiển thị kết quả gửi lệnh, có Đóng và Mở Launcher; giữ lỗi để thử lại. Windows và từng ứng dụng quyết định thời điểm cửa sổ xuất hiện.
+- Toast báo “Đã gửi N lệnh mở ứng dụng” rồi tự ẩn sau thời gian giữ kết quả. QuickStart tiếp tục theo dõi nền; chỉ hiện lại thông báo khi có lỗi. Đóng thông báo hoặc mở Launcher không hủy các lệnh đang xử lý. Khi nhận đủ kết quả thành công, tiến trình nền tự thoát nếu không còn cửa sổ làm việc.
+- Windows và từng ứng dụng quyết định thời điểm cửa sổ xuất hiện; trạng thái đã gửi lệnh không có nghĩa ứng dụng đã mở xong.
 - Giao diện mặc định là Tối; lựa chọn Sáng/Hệ thống đã lưu vẫn được giữ khi cập nhật.
 
 Phím Launcher: Enter chạy/hủy, Esc hủy/đóng, 1–9 chọn profile, Ctrl+, mở cấu hình. Picker: mũi tên, Space tick, Enter thêm, Esc hủy. Danh sách tác vụ: Delete, Alt+↑/↓; Ctrl+Z khi focus ngoài ô văn bản hoàn tác xóa tác vụ.

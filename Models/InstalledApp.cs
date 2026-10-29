@@ -8,4 +8,4 @@ public sealed record BrowserProfile(string Directory, string Name, string? Email
 public enum RunState { Pending, Running, Done, Failed, Skipped }
 public sealed record RunResult(Guid ActionId, RunState State, string? Error = null);
 public sealed record RunProgress(Guid ActionId, RunState State, string? Error = null, int? RemainingMs = null);
-public sealed record RunContext(bool IsAutostart = false);
+public sealed record RunContext(bool IsAutostart = false, IProgress<Guid>? Dispatched = null);

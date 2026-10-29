@@ -50,7 +50,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
                 {
                     yield return new(action.Id, RunState.Skipped); continue;
                 }
-                pending.Add(Task.Run(() => RunSingleAsync(action, ct), ct));
+                pending.Add(Task.Run(() => RunSingleCoreAsync(action, ct, () => context.Dispatched?.Report(action.Id)), ct));
                 yield return new(action.Id, RunState.Running);
             }
             Log.Information("Autostart queued {Count} launch requests for profile {ProfileId}; configured delays bypassed", pending.Count, profile.Id);
@@ -88,7 +88,8 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
             if (action.DelayAfterMs > 0) await Task.Delay(Math.Clamp(action.DelayAfterMs, 0, 60000), ct);
         }
     }
-    public async Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct)
+    public Task<RunResult> RunSingleAsync(LaunchAction action, CancellationToken ct) => RunSingleCoreAsync(action, ct);
+    private async Task<RunResult> RunSingleCoreAsync(LaunchAction action, CancellationToken ct, Action? onDispatched = null)
     {
         if (!action.Enabled) return new(action.Id, RunState.Skipped);
         var watch = Stopwatch.StartNew();
@@ -97,21 +98,21 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
             ct.ThrowIfCancellationRequested();
             switch (action)
             {
-                case AppAction app: await StartAppAsync(app, ct); break;
+                case AppAction app: await StartAppAsync(app, ct, onDispatched); break;
                 case WebsiteAction web:
                     if (!BrowserArguments.IsValidUrl(web.Url)) throw new ArgumentException("URL phải dùng http://, https:// hoặc file://.");
-                    if (web.BrowserId == "default") await StartProcessAsync(new(web.Url) { UseShellExecute = true }, ct);
+                    if (web.BrowserId == "default") await StartProcessAsync(new(web.Url) { UseShellExecute = true }, ct, onDispatched);
                     else
                     {
                         var browser = await browsers.FindAsync(web.BrowserId).WaitAsync(ct)
                             ?? throw new FileNotFoundException("Không tìm thấy trình duyệt đã chọn.");
                         await StartAppAsync(new() { Target = new() { Path = browser.ExePath, Aumid = browser.Aumid },
-                            Browser = new() { Urls = [web.Url], NewWindow = web.NewWindow } }, ct);
+                            Browser = new() { Urls = [web.Url], NewWindow = web.NewWindow } }, ct, onDispatched);
                     }
                     break;
                 case CommandAction command:
                     if (string.IsNullOrWhiteSpace(command.Command)) throw new ArgumentException("Chưa nhập lệnh.");
-                    var psi = BuildCommand(command); await StartProcessAsync(psi, ct); break;
+                    var psi = BuildCommand(command); await StartProcessAsync(psi, ct, onDispatched); break;
                 case DelayAction delay:
                     if (delay.Ms is < 0 or > 60000) throw new ArgumentOutOfRangeException(nameof(delay.Ms));
                     await Task.Delay(delay.Ms, ct); break;
@@ -126,7 +127,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
         catch (Exception ex)
         { Log.Error(ex, "Action {ActionId} {Name} failed", action.Id, action.Name); return new(action.Id, RunState.Failed, ex.Message); }
     }
-    private async Task StartAppAsync(AppAction action, CancellationToken ct)
+    private async Task StartAppAsync(AppAction action, CancellationToken ct, Action? onDispatched = null)
     {
         var path = action.Target.Path;
         var aumid = action.Target.Aumid;
@@ -152,7 +153,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
         {
             await StartProcessAsync(new(path!) { Arguments = args, UseShellExecute = true,
                 WorkingDirectory = string.IsNullOrWhiteSpace(action.WorkingDir) ? Path.GetDirectoryName(path)! : action.WorkingDir,
-                Verb = action.RunAsAdmin ? "runas" : "" }, ct);
+                Verb = action.RunAsAdmin ? "runas" : "" }, ct, onDispatched);
             return;
         }
         if (string.IsNullOrWhiteSpace(aumid)) throw new FileNotFoundException("Không tìm thấy ứng dụng: " + path);
@@ -160,6 +161,7 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
         if (aumid.Contains('!'))
         {
             Log.Information("Dispatching Store activation for action {ActionId}", action.Id);
+            onDispatched?.Invoke();
             try { await process.ActivateAsync(aumid, args); return; }
             catch (COMException ex) when (string.IsNullOrWhiteSpace(args))
             {
@@ -167,12 +169,13 @@ public sealed class LaunchService(IInstalledAppsService apps, IBrowserService br
             }
         }
         if (!string.IsNullOrWhiteSpace(args)) throw new InvalidOperationException("Ứng dụng này không có đường dẫn .exe để truyền tham số. Chọn lại bằng Browse.");
-        await StartProcessAsync(new("explorer.exe") { Arguments = BrowserArguments.Quote(@"shell:AppsFolder\" + aumid), UseShellExecute = true }, ct);
+        await StartProcessAsync(new("explorer.exe") { Arguments = BrowserArguments.Quote(@"shell:AppsFolder\" + aumid), UseShellExecute = true }, ct, onDispatched);
     }
-    private Task StartProcessAsync(ProcessStartInfo info, CancellationToken ct) => ShellInterop.OnSta(() =>
+    private Task StartProcessAsync(ProcessStartInfo info, CancellationToken ct, Action? onDispatched = null) => ShellInterop.OnSta(() =>
     {
         ct.ThrowIfCancellationRequested();
         Log.Information("Dispatching process launch: {Target}", info.FileName);
+        onDispatched?.Invoke();
         process.Start(info); return true;
     });
     public static ProcessStartInfo BuildCommand(CommandAction c)

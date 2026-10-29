@@ -5,7 +5,7 @@
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><UseWPF>true</UseWPF>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks><ApplicationIcon>Assets\APP.ico</ApplicationIcon>
-    <Version>3.0.2</Version><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>false</SelfContained>
+    <Version>3.0.3</Version><RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>false</SelfContained>
   </PropertyGroup>
   <!-- Release ships a single portable exe: no .pdb, nothing but the binary in the zip. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
